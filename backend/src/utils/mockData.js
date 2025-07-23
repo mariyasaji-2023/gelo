@@ -130,69 +130,250 @@ async function initializeMockData() {
   const baseLatitude = 9.9312;
   const baseLongitude = 76.2673;
   
-  const mockUsers = [
-    {
-      name: 'Arjun Kumar',
-      email: 'arjun.kumar@example.com',
-      password: 'password123',
-      contact: '+91-9876543210',
-      bio: 'Software developer passionate about mobile apps',
-      location: {
-        latitude: baseLatitude + 0.0001,
-        longitude: baseLongitude + 0.0001,
-        lastUpdated: new Date()
-      }
-    },
-    {
-      name: 'Priya Nair',
-      email: 'priya.nair@example.com',
-      password: 'password123',
-      contact: '+91-9876543211',
-      bio: 'UI/UX designer who loves creating beautiful interfaces',
-      location: {
-        latitude: baseLatitude + 0.0002,
-        longitude: baseLongitude - 0.0001,
-        lastUpdated: new Date()
-      }
-    },
-    {
-      name: 'Rahul Menon',
-      email: 'rahul.menon@example.com',
-      password: 'password123',
-      contact: '+91-9876543212',
-      bio: 'Data scientist exploring machine learning',
-      location: {
-        latitude: baseLatitude - 0.0001,
-        longitude: baseLongitude + 0.0002,
-        lastUpdated: new Date()
-      }
-    },
-    {
-      name: 'Sneha Pillai',
-      email: 'sneha.pillai@example.com',
-      password: 'password123',
-      contact: '+91-9876543213',
-      bio: 'Product manager building next-gen solutions',
-      location: {
-        latitude: baseLatitude + 0.0003,
-        longitude: baseLongitude + 0.0003,
-        lastUpdated: new Date()
-      }
-    },
-    {
-      name: 'Vishnu Raj',
-      email: 'vishnu.raj@example.com',
-      password: 'password123',
-      contact: '+91-9876543214',
-      bio: 'Full-stack developer and tech enthusiast',
-      location: {
-        latitude: baseLatitude - 0.0002,
-        longitude: baseLongitude - 0.0002,
-        lastUpdated: new Date()
-      }
+const mockUsers = [
+  {
+    name: 'Aarav Reddy',
+    email: 'aarav.reddy@example.com',
+    password: 'securePass1!',
+    contact: '+91-9000000001',
+    bio: 'Backend developer who loves working with Node.js',
+    location: {
+      latitude: baseLatitude + 0.0004,
+      longitude: baseLongitude - 0.0002,
+      lastUpdated: new Date()
     }
-  ];
-  
+  },
+  {
+    name: 'Meera Iyer',
+    email: 'meera.iyer@example.com',
+    password: 'securePass2!',
+    contact: '+91-9000000002',
+    bio: 'Frontend developer with a flair for animations',
+    location: {
+      latitude: baseLatitude + 0.0005,
+      longitude: baseLongitude + 0.0004,
+      lastUpdated: new Date()
+    }
+  },
+  {
+    name: 'Dev Patel',
+    email: 'dev.patel@example.com',
+    password: 'securePass3!',
+    contact: '+91-9000000003',
+    bio: 'Cloud engineer and DevOps specialist',
+    location: {
+      latitude: baseLatitude - 0.0003,
+      longitude: baseLongitude + 0.0003,
+      lastUpdated: new Date()
+    }
+  },
+  {
+    name: 'Kavya Shenoy',
+    email: 'kavya.shenoy@example.com',
+    password: 'securePass4!',
+    contact: '+91-9000000004',
+    bio: 'Mobile developer with a love for React Native',
+    location: {
+      latitude: baseLatitude + 0.0006,
+      longitude: baseLongitude - 0.0001,
+      lastUpdated: new Date()
+    }
+  },
+  {
+    name: 'Rohan Das',
+    email: 'rohan.das@example.com',
+    password: 'securePass5!',
+    contact: '+91-9000000005',
+    bio: 'JavaScript ninja exploring full-stack development',
+    location: {
+      latitude: baseLatitude - 0.0004,
+      longitude: baseLongitude + 0.0005,
+      lastUpdated: new Date()
+    }
+  },
+  {
+    name: 'Nisha Verma',
+    email: 'nisha.verma@example.com',
+    password: 'securePass6!',
+    contact: '+91-9000000006',
+    bio: 'Tech lead with a focus on scalable systems',
+    location: {
+      latitude: baseLatitude + 0.0002,
+      longitude: baseLongitude + 0.0006,
+      lastUpdated: new Date()
+    }
+  },
+  {
+    name: 'Ayaan Sheikh',
+    email: 'ayaan.sheikh@example.com',
+    password: 'securePass7!',
+    contact: '+91-9000000007',
+    bio: 'Web developer and open-source contributor',
+    location: {
+      latitude: baseLatitude + 0.0001,
+      longitude: baseLongitude - 0.0005,
+      lastUpdated: new Date()
+    }
+  },
+  {
+    name: 'Diya Kapoor',
+    email: 'diya.kapoor@example.com',
+    password: 'securePass8!',
+    contact: '+91-9000000008',
+    bio: 'Cybersecurity enthusiast and ethical hacker',
+    location: {
+      latitude: baseLatitude + 0.0003,
+      longitude: baseLongitude + 0.0001,
+      lastUpdated: new Date()
+    }
+  },
+  {
+    name: 'Yash Mittal',
+    email: 'yash.mittal@example.com',
+    password: 'securePass9!',
+    contact: '+91-9000000009',
+    bio: 'Python developer building smart automation tools',
+    location: {
+      latitude: baseLatitude - 0.0002,
+      longitude: baseLongitude - 0.0003,
+      lastUpdated: new Date()
+    }
+  },
+  {
+    name: 'Sanya Joseph',
+    email: 'sanya.joseph@example.com',
+    password: 'securePass10!',
+    contact: '+91-9000000010',
+    bio: 'Product designer focused on usability and UX',
+    location: {
+      latitude: baseLatitude - 0.0005,
+      longitude: baseLongitude + 0.0002,
+      lastUpdated: new Date()
+    }
+  },
+  {
+    name: 'Varun Bhat',
+    email: 'varun.bhat@example.com',
+    password: 'securePass11!',
+    contact: '+91-9000000011',
+    bio: 'AI/ML researcher solving real-world problems',
+    location: {
+      latitude: baseLatitude + 0.0007,
+      longitude: baseLongitude - 0.0003,
+      lastUpdated: new Date()
+    }
+  },
+  {
+    name: 'Anaya Roy',
+    email: 'anaya.roy@example.com',
+    password: 'securePass12!',
+    contact: '+91-9000000012',
+    bio: 'QA engineer dedicated to bug-free releases',
+    location: {
+      latitude: baseLatitude + 0.0004,
+      longitude: baseLongitude + 0.0006,
+      lastUpdated: new Date()
+    }
+  },
+  {
+    name: 'Ishaan Joshi',
+    email: 'ishaan.joshi@example.com',
+    password: 'securePass13!',
+    contact: '+91-9000000013',
+    bio: 'VR/AR developer building immersive experiences',
+    location: {
+      latitude: baseLatitude + 0.0001,
+      longitude: baseLongitude + 0.0008,
+      lastUpdated: new Date()
+    }
+  },
+  {
+    name: 'Neha Menon',
+    email: 'neha.menon@example.com',
+    password: 'securePass14!',
+    contact: '+91-9000000014',
+    bio: 'Digital marketer with a creative mindset',
+    location: {
+      latitude: baseLatitude - 0.0006,
+      longitude: baseLongitude + 0.0001,
+      lastUpdated: new Date()
+    }
+  },
+  {
+    name: 'Ritik Sharma',
+    email: 'ritik.sharma@example.com',
+    password: 'securePass15!',
+    contact: '+91-9000000015',
+    bio: 'Blockchain developer with interest in DeFi',
+    location: {
+      latitude: baseLatitude + 0.0008,
+      longitude: baseLongitude - 0.0004,
+      lastUpdated: new Date()
+    }
+  },
+  {
+    name: 'Aisha Khan',
+    email: 'aisha.khan@example.com',
+    password: 'securePass16!',
+    contact: '+91-9000000016',
+    bio: 'Creative coder and UI artist',
+    location: {
+      latitude: baseLatitude - 0.0003,
+      longitude: baseLongitude + 0.0007,
+      lastUpdated: new Date()
+    }
+  },
+  {
+    name: 'Zaid Hussain',
+    email: 'zaid.hussain@example.com',
+    password: 'securePass17!',
+    contact: '+91-9000000017',
+    bio: 'Game developer passionate about indie titles',
+    location: {
+      latitude: baseLatitude + 0.0006,
+      longitude: baseLongitude + 0.0005,
+      lastUpdated: new Date()
+    }
+  },
+  {
+    name: 'Pooja Ramesh',
+    email: 'pooja.ramesh@example.com',
+    password: 'securePass18!',
+    contact: '+91-9000000018',
+    bio: 'Technical writer making complex topics simple',
+    location: {
+      latitude: baseLatitude + 0.0009,
+      longitude: baseLongitude - 0.0006,
+      lastUpdated: new Date()
+    }
+  },
+  {
+    name: 'Harsh Vardhan',
+    email: 'harsh.vardhan@example.com',
+    password: 'securePass19!',
+    contact: '+91-9000000019',
+    bio: 'Automation tester and CI/CD expert',
+    location: {
+      latitude: baseLatitude - 0.0001,
+      longitude: baseLongitude - 0.0004,
+      lastUpdated: new Date()
+    }
+  },
+  {
+    name: 'Tanya George',
+    email: 'tanya.george@example.com',
+    password: 'securePass20!',
+    contact: '+91-9000000020',
+    bio: 'Entrepreneur building EdTech products',
+    location: {
+      latitude: baseLatitude + 0.0005,
+      longitude: baseLongitude + 0.0009,
+      lastUpdated: new Date()
+    }
+  }
+];
+
+
   console.log('🎭 Creating mock users...');
   
   for (const userData of mockUsers) {

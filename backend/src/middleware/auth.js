@@ -205,6 +205,8 @@ const securityHeaders = (req, res, next) => {
 /**
  * CORS middleware for development
  */
+// Update your CORS middleware in backend/src/middleware/auth.js
+
 const corsMiddleware = (req, res, next) => {
   const allowedOrigins = [
     'http://localhost:4200',
@@ -218,9 +220,11 @@ const corsMiddleware = (req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
   
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  // ✅ Add PATCH method and more headers
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
 
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
@@ -230,7 +234,6 @@ const corsMiddleware = (req, res, next) => {
 
   next();
 };
-
 module.exports = {
   verifyToken,
   optionalAuth,

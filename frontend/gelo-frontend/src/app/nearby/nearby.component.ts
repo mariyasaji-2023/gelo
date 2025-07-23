@@ -1,6 +1,9 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from '../services/auth.service';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { environment } from '../../environments/environment';
+import { UserService } from '../services/user.service';
 
 interface NearbyUser {
   id: string;
@@ -20,6 +23,8 @@ interface NearbyUser {
   vy?: number;
   image?: string;
   isCenter?: boolean;
+  latitude?: number;
+  longitude?: number;
 }
 
 @Component({
@@ -27,8 +32,25 @@ interface NearbyUser {
   template: `
     <div class="nearby-container" [ngClass]="{'network-mode': viewMode === 'network', 'list-mode': viewMode === 'list'}">
       
+      <!-- Loading State -->
+      <div *ngIf="isLoading" class="loading-overlay">
+        <div class="loading-spinner">
+          <div class="spinner"></div>
+          <p>Finding nearby users...</p>
+        </div>
+      </div>
+
+      <!-- Error State -->
+      <div *ngIf="error" class="error-overlay">
+        <div class="error-content">
+          <h3>⚠️ Error</h3>
+          <p>{{ error }}</p>
+          <button (click)="retryLoadUsers()" class="retry-btn">Try Again</button>
+        </div>
+      </div>
+
       <!-- Network View -->
-      <div *ngIf="viewMode === 'network'" class="network-view">
+      <div *ngIf="viewMode === 'network' && !isLoading && !error" class="network-view">
         <!-- Header -->
         <div class="network-header">
           <div class="header-controls">
@@ -107,6 +129,13 @@ interface NearbyUser {
               Auto-refresh
             </label>
           </div>
+
+          <!-- User Count Display -->
+          <div class="control-group">
+            <label class="control-label">
+              Found: {{ allUsers.length }} users
+            </label>
+          </div>
         </div>
 
         <!-- Profile Modal for Network View -->
@@ -139,7 +168,7 @@ interface NearbyUser {
                 </div>
               </div>
               
-              <div class="info-section">
+              <div class="info-section" *ngIf="selectedUser.interests?.length">
                 <h3>Interests</h3>
                 <div class="interests-grid">
                   <span *ngFor="let interest of selectedUser.interests" class="interest-badge">
@@ -148,7 +177,7 @@ interface NearbyUser {
                 </div>
               </div>
               
-              <div class="info-section">
+              <div class="info-section" *ngIf="selectedUser.location">
                 <h3>Location</h3>
                 <p>{{ selectedUser.location }}</p>
               </div>
@@ -162,8 +191,8 @@ interface NearbyUser {
         </div>
       </div>
 
-      <!-- List View (Fallback) -->
-      <div *ngIf="viewMode === 'list'" class="list-view">
+      <!-- List View -->
+      <div *ngIf="viewMode === 'list' && !isLoading && !error" class="list-view">
         <div class="list-header">
           <button 
             (click)="setViewMode('network')"
@@ -171,18 +200,39 @@ interface NearbyUser {
             🌐 Network View
           </button>
           
-          <button 
-            (click)="logout()"
-            class="logout-btn-list">
-            🚪 Logout
-          </button>
+          <div class="list-controls">
+            <button 
+              (click)="detectNearbyUsers()"
+              [disabled]="isDetecting"
+              class="refresh-btn">
+              {{ isDetecting ? 'Refreshing...' : '🔄 Refresh' }}
+            </button>
+            
+            <button 
+              (click)="logout()"
+              class="logout-btn-list">
+              🚪 Logout
+            </button>
+          </div>
         </div>
         
         <div class="list-content">
+          <div *ngIf="filteredUsers.length === 0" class="no-users">
+            <h3>No users found nearby</h3>
+            <p>Try adjusting your search radius or refresh to check again.</p>
+          </div>
+          
           <div *ngFor="let user of filteredUsers" class="list-user-card">
-            <h3>{{ user.name }}</h3>
-            <p class="user-profession">{{ user.profession }}</p>
-            <p class="user-distance">{{ user.distance }}m away</p>
+            <div class="user-avatar">
+              <span class="user-initials">{{ getUserInitials(user.name) }}</span>
+              <div class="online-indicator" [class.online]="user.isOnline"></div>
+            </div>
+            <div class="user-info">
+              <h3>{{ user.name }}</h3>
+              <p class="user-profession" *ngIf="user.profession">{{ user.profession }}</p>
+              <p class="user-distance">{{ user.distance }}m away</p>
+              <p class="user-bio" *ngIf="user.bio">{{ user.bio }}</p>
+            </div>
             <button (click)="viewUserProfile(user)" class="view-profile-btn">View Profile</button>
           </div>
         </div>
@@ -210,6 +260,82 @@ interface NearbyUser {
     .nearby-container {
       min-height: 100vh;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    }
+
+    /* Loading Styles */
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #000000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .loading-spinner {
+      text-align: center;
+      color: white;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #374151;
+      border-top: 4px solid #dc2626;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Error Styles */
+    .error-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #000000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .error-content {
+      text-align: center;
+      color: white;
+      padding: 2rem;
+      border: 1px solid #dc2626;
+      border-radius: 0.5rem;
+      background: #1f2937;
+    }
+
+    .error-content h3 {
+      color: #ef4444;
+      margin-bottom: 1rem;
+    }
+
+    .retry-btn {
+      background: #dc2626;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      margin-top: 1rem;
+    }
+
+    .retry-btn:hover {
+      background: #b91c1c;
     }
 
     /* Network View Styles */
@@ -504,6 +630,175 @@ interface NearbyUser {
       font-family: monospace !important;
     }
 
+    /* List View Styles */
+    .list-view {
+      min-height: 100vh;
+      background: #f5f5f5;
+      padding: 2rem;
+    }
+
+    .list-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .list-controls {
+      display: flex;
+      gap: 1rem;
+    }
+
+    .network-switch-btn {
+      padding: 0.5rem 1rem;
+      background: #dc2626;
+      color: white;
+      border: none;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: background 0.3s ease;
+    }
+
+    .network-switch-btn:hover {
+      background: #b91c1c;
+    }
+
+    .refresh-btn {
+      padding: 0.5rem 1rem;
+      background: #059669;
+      color: white;
+      border: none;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: background 0.3s ease;
+    }
+
+    .refresh-btn:hover:not(:disabled) {
+      background: #047857;
+    }
+
+    .refresh-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .logout-btn-list {
+      padding: 0.5rem 1rem;
+      background: #6b7280;
+      color: white;
+      border: none;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: background 0.3s ease;
+    }
+
+    .logout-btn-list:hover {
+      background: #4b5563;
+    }
+
+    .list-content {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .no-users {
+      text-align: center;
+      padding: 3rem;
+      color: #6b7280;
+    }
+
+    .list-user-card {
+      background: white;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .user-avatar {
+      position: relative;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: #dc2626;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+    }
+
+    .user-initials {
+      font-size: 1.2rem;
+    }
+
+    .online-indicator {
+      position: absolute;
+      bottom: 2px;
+      right: 2px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #6b7280;
+      border: 2px solid white;
+    }
+
+    .online-indicator.online {
+      background: #10b981;
+    }
+
+    .user-info {
+      flex: 1;
+    }
+
+    .user-info h3 {
+      margin: 0 0 0.25rem 0;
+      color: #1f2937;
+      font-size: 1.125rem;
+    }
+
+    .user-info .user-profession {
+      color: #6b7280;
+      margin: 0 0 0.25rem 0;
+      font-size: 0.875rem;
+    }
+
+    .user-info .user-distance {
+      color: #ef4444;
+      font-size: 0.75rem;
+      font-weight: 500;
+      margin: 0 0 0.25rem 0;
+    }
+
+    .user-info .user-bio {
+      color: #9ca3af;
+      font-size: 0.8rem;
+      margin: 0;
+      line-height: 1.3;
+    }
+
+    .view-profile-btn {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      font-size: 0.875rem;
+      white-space: nowrap;
+    }
+
+    .view-profile-btn:hover {
+      background: #5a67d8;
+    }
+
     /* Logout Modal Styles */
     .logout-modal-overlay {
       background: rgba(0, 0, 0, 0.6);
@@ -577,95 +872,6 @@ interface NearbyUser {
       background: #b91c1c;
     }
 
-    /* List View Styles */
-    .list-view {
-      min-height: 100vh;
-      background: #f5f5f5;
-      padding: 2rem;
-    }
-
-    .list-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1.5rem;
-    }
-
-    .network-switch-btn {
-      padding: 0.5rem 1rem;
-      background: #dc2626;
-      color: white;
-      border: none;
-      border-radius: 0.25rem;
-      cursor: pointer;
-      font-size: 1rem;
-      transition: background 0.3s ease;
-    }
-
-    .network-switch-btn:hover {
-      background: #b91c1c;
-    }
-
-    .logout-btn-list {
-      padding: 0.5rem 1rem;
-      background: #6b7280;
-      color: white;
-      border: none;
-      border-radius: 0.25rem;
-      cursor: pointer;
-      font-size: 1rem;
-      transition: background 0.3s ease;
-    }
-
-    .logout-btn-list:hover {
-      background: #4b5563;
-    }
-
-    .list-content {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-
-    .list-user-card {
-      background: white;
-      padding: 1rem;
-      border-radius: 0.5rem;
-      border: 1px solid #e5e7eb;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    }
-
-    .list-user-card h3 {
-      margin: 0 0 0.5rem 0;
-      color: #1f2937;
-      font-size: 1.125rem;
-    }
-
-    .list-user-card .user-profession {
-      color: #6b7280;
-      margin: 0 0 0.5rem 0;
-    }
-
-    .list-user-card .user-distance {
-      color: #ef4444;
-      font-size: 0.875rem;
-      margin: 0 0 1rem 0;
-    }
-
-    .view-profile-btn {
-      background: #667eea;
-      color: white;
-      border: none;
-      padding: 0.5rem 1rem;
-      border-radius: 0.25rem;
-      cursor: pointer;
-      font-size: 0.875rem;
-    }
-
-    .view-profile-btn:hover {
-      background: #5a67d8;
-    }
-
     /* Responsive Styles */
     @media (max-width: 768px) {
       .network-header {
@@ -721,6 +927,17 @@ interface NearbyUser {
         gap: 1rem;
       }
 
+      .list-controls {
+        flex-direction: column;
+        width: 100%;
+      }
+
+      .list-user-card {
+        flex-direction: column;
+        text-align: center;
+        gap: 0.5rem;
+      }
+
       .logout-actions {
         flex-direction: column;
       }
@@ -740,111 +957,25 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
   viewMode: 'network' | 'list' = 'network';
   hoveredUser: string | null = null;
   showLogoutConfirm = false;
+  isLoading = true;
+  error: string | null = null;
+  
+  // User location
+  userLocation: { latitude: number; longitude: number } | null = null;
   
   private autoRefreshInterval: any;
   private animationFrame: any;
   private canvas!: HTMLCanvasElement;
   private ctx!: CanvasRenderingContext2D;
+  private apiUrl = environment.apiUrl || 'http://localhost:3000/api';
 
-  // Enhanced users data with network properties (copied from React)
-  allUsers: NearbyUser[] = [
-    {
-      id: '1',
-      name: 'Arjun Menon',
-      distance: 15,
-      bio: 'Software engineer passionate about mobile development',
-      contact: '+91-9876543210',
-      isOnline: true,
-      lastSeen: new Date(),
-      profession: 'Engineer',
-      location: 'Kochi Marine Drive',
-      interests: ['technology', 'mobile', 'ai'],
-      connections: ['2', '3'],
-      x: 300,
-      y: 200,
-      vx: Math.random() * 2 - 1,
-      vy: Math.random() * 2 - 1,
-      image: '🧑‍💻'
-    },
-    {
-      id: '2',
-      name: 'Priya Nair',
-      distance: 23,
-      bio: 'UI/UX Designer. Coffee enthusiast',
-      contact: '+91-9876543211',
-      isOnline: true,
-      lastSeen: new Date(),
-      profession: 'Designer',
-      location: 'Lulu Mall',
-      interests: ['design', 'coffee', 'technology'],
-      connections: ['1', '4'],
-      x: 600,
-      y: 300,
-      vx: Math.random() * 2 - 1,
-      vy: Math.random() * 2 - 1,
-      image: '🎨'
-    },
-    {
-      id: '3',
-      name: 'Vikram Kumar',
-      distance: 31,
-      bio: 'Data scientist and AI enthusiast',
-      contact: '+91-9876543212',
-      isOnline: false,
-      lastSeen: new Date(Date.now() - 300000),
-      profession: 'Data Scientist',
-      location: 'Infopark',
-      interests: ['ai', 'data', 'technology'],
-      connections: ['1'],
-      x: 400,
-      y: 500,
-      vx: Math.random() * 2 - 1,
-      vy: Math.random() * 2 - 1,
-      image: '📊'
-    },
-    {
-      id: '4',
-      name: 'Sneha Pillai',
-      distance: 45,
-      bio: 'Digital marketing specialist. Traveler',
-      contact: '+91-9876543213',
-      isOnline: true,
-      lastSeen: new Date(),
-      profession: 'Marketer',
-      location: 'Fort Kochi',
-      interests: ['marketing', 'travel', 'photography'],
-      connections: ['2'],
-      x: 700,
-      y: 150,
-      vx: Math.random() * 2 - 1,
-      vy: Math.random() * 2 - 1,
-      image: '📸'
-    },
-    {
-      id: 'center',
-      name: 'You',
-      distance: 0,
-      bio: 'Discovering connections nearby',
-      contact: '+91-9876543200',
-      isOnline: true,
-      lastSeen: new Date(),
-      profession: 'Explorer',
-      location: 'Kochi, Kerala',
-      interests: ['networking', 'discovery'],
-      connections: ['1', '2', '3', '4'],
-      x: 500,
-      y: 350,
-      vx: 0,
-      vy: 0,
-      image: '👤',
-      isCenter: true
-    }
-  ];
-
+  // Users from backend
+  allUsers: NearbyUser[] = [];
   constructor(
-    private router: Router,
-    private authService: AuthService
-  ) {}
+  private router: Router,
+  private authService: AuthService,
+  private userService: UserService
+) {}
 
   ngOnInit() {
     // Check authentication
@@ -854,28 +985,392 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     
     this.currentUser = this.authService.getCurrentUser();
-    this.filterUsersByRadius();
-    
-    // Auto-detect on page load
-    setTimeout(() => {
-      this.detectNearbyUsers();
-    }, 500);
+    this.initializeLocation();
   }
 
   ngAfterViewInit() {
-    if (this.viewMode === 'network') {
+    if (this.viewMode === 'network' && !this.isLoading && !this.error) {
       this.initializeCanvas();
     }
   }
 
   ngOnDestroy() {
+    this.cleanup();
+  }
+
+  private cleanup() {
     if (this.autoRefreshInterval) {
       clearInterval(this.autoRefreshInterval);
+      this.autoRefreshInterval = null;
     }
     if (this.animationFrame) {
       cancelAnimationFrame(this.animationFrame);
     }
   }
+
+ private async initializeLocation() {
+  try {
+    console.log('🔍 Getting user coordinates from database...');
+    
+    // Get current user's profile from database to get their stored location
+    this.userService.getCurrentUserProfile().subscribe({
+      next: (response) => {
+        console.log('👤 User profile from database:', response);
+        
+        if (response.user) {
+          let userLat: number | undefined;
+          let userLng: number | undefined;
+          
+          // ✅ FIXED: Proper type checking for location
+          // Check if user has location in database - handle both object and string types
+          if (response.user.location && typeof response.user.location === 'object' && 
+              'latitude' in response.user.location && 'longitude' in response.user.location) {
+            // Handle nested location structure (object)
+            userLat = response.user.location.latitude;
+            userLng = response.user.location.longitude;
+            console.log('✅ Found nested location in database:', { userLat, userLng });
+          } else if (response.user.latitude && response.user.longitude) {
+            // Handle flat location structure
+            userLat = response.user.latitude;
+            userLng = response.user.longitude;
+            console.log('✅ Found flat location in database:', { userLat, userLng });
+          }
+          
+          if (userLat && userLng) {
+            this.userLocation = {
+              latitude: userLat,
+              longitude: userLng
+            };
+            console.log('🗺️ Using coordinates from database:', this.userLocation);
+            this.loadNearbyUsers();
+          } else {
+            console.warn('⚠️ User has no location stored in database');
+            this.showLocationError();
+          }
+        } else {
+          console.error('❌ No user data received from database');
+          this.showLocationError();
+        }
+      },
+      error: (error) => {
+        console.error('❌ Failed to get user profile from database:', error);
+        this.showLocationError();
+      }
+    });
+
+  } catch (error) {
+    console.error('Location initialization error:', error);
+    this.error = 'Failed to initialize location. Please refresh and allow location access.';
+    this.isLoading = false;
+  }
+}
+
+private showLocationError() {
+  this.error = 'No location found in your profile. Please update your location in settings.';
+  this.isLoading = false;
+}
+private async loadNearbyUsers() {
+  if (!this.userLocation) {
+    this.error = 'Location not available';
+    this.isLoading = false;
+    return;
+  }
+
+  try {
+    this.isLoading = true;
+    this.error = null;
+
+    console.log('🔍 Loading nearby users from backend...', {
+      latitude: this.userLocation.latitude,
+      longitude: this.userLocation.longitude,
+      radius: this.searchRadius
+    });
+
+    // Get nearby users from backend
+    const response = await this.userService.getNearbyUsers(
+      this.userLocation.latitude,
+      this.userLocation.longitude,
+      this.searchRadius
+    ).toPromise();
+
+    console.log('✅ Backend response received:', response);
+
+    if (response && response.users && Array.isArray(response.users)) {
+      console.log('📊 Raw backend users:', response.users.length);
+      console.log('📋 Backend users data:', response.users.map(u => ({ 
+        name: u.name, 
+        email: u.email, 
+        lat: u.latitude, 
+        lng: u.longitude 
+      })));
+      
+      // ✅ Process all users correctly
+      this.allUsers = this.processBackendUsers(response.users);
+      
+      console.log('🔄 After processing - allUsers:', this.allUsers.length);
+      console.log('📝 All users details:', this.allUsers.map(u => ({ 
+        name: u.name, 
+        distance: u.distance, 
+        isCenter: u.isCenter 
+      })));
+      
+      this.filterUsersByRadius();
+      
+      console.log('🎯 After filtering - filteredUsers:', this.filteredUsers.length);
+      
+      this.initializeNetworkPositions();
+      
+      // Initialize canvas after data is loaded
+      if (this.viewMode === 'network') {
+        setTimeout(() => {
+          this.initializeCanvas();
+        }, 100);
+      }
+    } else {
+      console.warn('⚠️ Invalid response format or no users array');
+      this.allUsers = [];
+      this.filteredUsers = [];
+    }
+
+  } catch (error: any) {
+    console.error('❌ Error loading nearby users:', error);
+    
+    if (error.message.includes('Cannot connect to server')) {
+      this.error = 'Cannot connect to server. Please make sure the backend is running on http://localhost:3000';
+    } else if (error.message.includes('Authentication failed')) {
+      this.error = 'Authentication failed. Redirecting to login...';
+      setTimeout(() => {
+        this.authService.logout();
+        this.router.navigate(['/login']);
+      }, 2000);
+      return;
+    } else {
+      this.error = error.message || 'Failed to load nearby users. Please try again.';
+    }
+  } finally {
+    this.isLoading = false;
+  }
+}
+
+
+private processBackendUsers(users: any[]): NearbyUser[] {
+  console.log('Processing users from backend:', users.length);
+  
+  // ✅ Fix: Process all backend users first
+  const processedUsers: NearbyUser[] = [];
+  
+  // Add center user (current user) FIRST
+  const centerUser: NearbyUser = {
+    id: 'center',
+    name: 'You',
+    distance: 0,
+    bio: 'Discovering connections nearby',
+    contact: this.currentUser?.email || '+91-9876543200',
+    isOnline: true,
+    lastSeen: new Date(),
+    profession: 'Explorer',
+    location: 'Current Location',
+    interests: ['networking', 'discovery'],
+    connections: [], // Will be set after all users are processed
+    x: 500,
+    y: 350,
+    vx: 0,
+    vy: 0,
+    image: '👤',
+    isCenter: true
+  };
+  
+  processedUsers.push(centerUser);
+  
+ // ✅ Process backend users and add them to the array
+  users.forEach((user, index) => {
+    // 🐛 DEBUG: Log the comparison details
+    console.log('🔍 User comparison debug:', {
+      'Backend user email': user.email,
+      'Backend user id': user.id || user._id,
+      'Current user email': this.currentUser?.email,
+      'Current user id': this.currentUser?.id,
+      'Email match': user.email === this.currentUser?.email,
+      'ID match': (user.id || user._id) === this.currentUser?.id
+    });
+
+    // 🚫 TEMPORARILY DISABLED: Skip current user check
+    // if (user.email === this.currentUser?.email || user.id === this.currentUser?.id) {
+    //   console.log('Skipping current user from backend list:', user.name);
+    //   return;
+    // }
+    
+    // ✅ FIXED: Handle nested location structure from backend
+    let userLatitude: number;
+    let userLongitude: number;
+    let distance: number;
+    
+    if (user.location && user.location.latitude && user.location.longitude) {
+      // Backend format: user.location.latitude, user.location.longitude
+      userLatitude = user.location.latitude;
+      userLongitude = user.location.longitude;
+      distance = user.distance || this.calculateDistance(userLatitude, userLongitude);
+    } else if (user.latitude && user.longitude) {
+      // Flat format: user.latitude, user.longitude (fallback)
+      userLatitude = user.latitude;
+      userLongitude = user.longitude;
+      distance = user.distance || this.calculateDistance(userLatitude, userLongitude);
+    } else {
+      console.warn('User has no valid location data:', user.name);
+      return; // Skip users without location
+    }
+    
+    const processedUser: NearbyUser = {
+      id: user.id || user._id,
+      name: user.name,
+      distance: distance,
+      bio: user.bio || 'No bio available',
+      contact: user.contact || user.email || 'No contact info',
+      isOnline: user.isOnline !== undefined ? user.isOnline : Math.random() > 0.3,
+      lastSeen: user.lastSeen ? new Date(user.lastSeen) : new Date(),
+      profession: user.profession || this.getRandomProfession(),
+      location: user.location?.address || 'Unknown location',
+      interests: user.interests || this.getRandomInterests(),
+      connections: [], // Will be set after all users are processed
+      latitude: userLatitude,
+      longitude: userLongitude,
+      // Network visualization properties
+      x: 0, // Will be set in initializeNetworkPositions
+      y: 0,
+      vx: Math.random() * 2 - 1,
+      vy: Math.random() * 2 - 1,
+      image: this.getUserEmoji(user.name, user.profession)
+    };
+    
+    console.log(`✅ Processed user: ${processedUser.name} at (${userLatitude}, ${userLongitude}) - ${distance}m away`);
+    processedUsers.push(processedUser);
+  });
+  // ✅ Generate connections after all users are processed
+  processedUsers.forEach(user => {
+    if (user.isCenter) {
+      // Center user connects to all other users
+      user.connections = processedUsers.filter(u => !u.isCenter).map(u => u.id);
+    } else {
+      // Other users connect to center and some random users
+      user.connections = this.generateConnections(user.id, processedUsers);
+    }
+  });
+
+  console.log('Total processed users (including center):', processedUsers.length);
+  console.log('Backend users processed:', processedUsers.length - 1); // Exclude center user
+  console.log('Processed users summary:', processedUsers.map(u => ({
+    name: u.name,
+    isCenter: u.isCenter,
+    distance: u.distance,
+    hasLocation: !!(u.latitude && u.longitude)
+  })));
+  
+  return processedUsers;
+}
+
+  private calculateDistance(lat: number, lng: number): number {
+    if (!this.userLocation) return 0;
+    
+    const R = 6371e3; // Earth's radius in meters
+    const φ1 = this.userLocation.latitude * Math.PI/180;
+    const φ2 = lat * Math.PI/180;
+    const Δφ = (lat - this.userLocation.latitude) * Math.PI/180;
+    const Δλ = (lng - this.userLocation.longitude) * Math.PI/180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return Math.round(R * c); // Distance in meters
+  }
+
+  private getRandomProfession(): string {
+    const professions = [
+      'Software Engineer', 'Designer', 'Data Scientist', 'Product Manager',
+      'Marketing Specialist', 'Consultant', 'Entrepreneur', 'Developer',
+      'Analyst', 'Architect', 'Manager', 'Freelancer'
+    ];
+    return professions[Math.floor(Math.random() * professions.length)];
+  }
+
+  private getRandomInterests(): string[] {
+    const allInterests = [
+      'technology', 'design', 'travel', 'photography', 'music', 'art',
+      'sports', 'reading', 'cooking', 'gaming', 'fitness', 'movies',
+      'startups', 'ai', 'mobile', 'web', 'data', 'marketing'
+    ];
+    
+    const count = Math.floor(Math.random() * 4) + 2; // 2-5 interests
+    const shuffled = allInterests.sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, count);
+  }
+
+  
+private generateConnections(userId: string, allUsers: NearbyUser[]): string[] {
+  // Generate random connections (simulate mutual interests or proximity)
+  const connections: string[] = [];
+  const maxConnections = Math.min(3, allUsers.length - 1); // Exclude self
+  
+  // Always connect to center user if this isn't the center user
+  if (userId !== 'center') {
+    connections.push('center');
+  }
+  
+  // Add random connections to other users
+  const otherUsers = allUsers.filter(u => u.id !== userId && u.id !== 'center');
+  const shuffledUsers = otherUsers.sort(() => 0.5 - Math.random());
+  
+  const additionalConnections = Math.min(
+    Math.floor(Math.random() * maxConnections), 
+    shuffledUsers.length
+  );
+  
+  for (let i = 0; i < additionalConnections; i++) {
+    if (!connections.includes(shuffledUsers[i].id)) {
+      connections.push(shuffledUsers[i].id);
+    }
+  }
+  
+  return connections;
+}
+
+
+  private getUserEmoji(name: string, profession?: string): string {
+    // Simple emoji assignment based on name or profession
+    const emojis = ['👨‍💻', '👩‍💻', '🧑‍💼', '👨‍🎨', '👩‍🎨', '🧑‍🔬', '👨‍🏫', '👩‍🏫', '🧑‍⚕️', '👨‍🚀'];
+    const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return emojis[hash % emojis.length];
+  }
+private initializeNetworkPositions() {
+  if (this.allUsers.length === 0) return;
+  
+  console.log('Initializing network positions for', this.allUsers.length, 'users');
+  
+  // Position users in a circle around center
+  const centerX = 500;
+  const centerY = 350;
+  const baseRadius = 200;
+  
+  this.allUsers.forEach((user, index) => {
+    if (user.isCenter) {
+      user.x = centerX;
+      user.y = centerY;
+    } else {
+      // Calculate angle for this user
+      const nonCenterUsers = this.allUsers.filter(u => !u.isCenter);
+      const userIndex = nonCenterUsers.findIndex(u => u.id === user.id);
+      const angle = (userIndex * 2 * Math.PI) / nonCenterUsers.length;
+      
+      // Add some randomness to the radius
+      const radius = baseRadius + Math.random() * 100;
+      
+      user.x = centerX + Math.cos(angle) * radius;
+      user.y = centerY + Math.sin(angle) * radius;
+    }
+  });
+}
+
 
   initializeCanvas() {
     if (this.networkCanvas && this.networkCanvas.nativeElement) {
@@ -902,9 +1397,13 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  getNetworkUsers(): NearbyUser[] {
-    return this.allUsers.filter(user => user.isCenter || user.distance <= this.searchRadius);
-  }
+  
+getNetworkUsers(): NearbyUser[] {
+  // ✅ Fix: Return all users within radius OR center user
+  return this.allUsers.filter(user => 
+    user.isCenter || user.distance <= this.searchRadius
+  );
+}
 
   animate = () => {
     if (this.viewMode !== 'network' || !this.ctx || !this.canvas) {
@@ -916,7 +1415,7 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
     
     const networkUsers = this.getNetworkUsers();
     
-    // Draw connections first (copied from React logic)
+    // Draw connections first
     networkUsers.forEach(user => {
       if (user.connections) {
         user.connections.forEach(connId => {
@@ -935,7 +1434,7 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
             this.ctx.stroke();
             this.ctx.globalAlpha = 1;
 
-            // Draw flowing particles (copied from React)
+            // Draw flowing particles
             if (isHighlighted) {
               const time = Date.now() * 0.001;
               const progress = (Math.sin(time + user.id.charCodeAt(0)) + 1) / 2;
@@ -952,7 +1451,7 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     });
 
-    // Draw nodes (copied from React)
+    // Draw nodes
     networkUsers.forEach(user => {
       if (user.x === undefined || user.y === undefined) return;
       
@@ -972,7 +1471,7 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
       this.ctx.lineWidth = isCenter ? 3 : 2;
       this.ctx.stroke();
 
-      // Emoji/Icon - High quality rendering (copied from React)
+      // Emoji/Icon
       this.ctx.font = isCenter ? '32px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif' : '24px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
@@ -982,7 +1481,7 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
       this.ctx.fillText(user.image || '👤', user.x, user.y);
       this.ctx.shadowBlur = 0;
 
-      // Pulsing effect for online users (copied from React)
+      // Pulsing effect for online users
       if (user.isOnline && isHovered) {
         const pulseRadius = 50 + Math.sin(Date.now() * 0.005) * 10;
         this.ctx.beginPath();
@@ -995,7 +1494,7 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     });
 
-    // Update positions with physics (copied from React)
+    // Update positions with physics
     this.updatePhysics(networkUsers);
 
     this.animationFrame = requestAnimationFrame(this.animate);
@@ -1005,7 +1504,7 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
     users.forEach(user => {
       if (!user.isCenter && user.x !== undefined && user.y !== undefined && 
           user.vx !== undefined && user.vy !== undefined) {
-        // Attraction to center (copied from React)
+        // Attraction to center
         const centerUser = users.find(u => u.isCenter);
         if (centerUser && centerUser.x !== undefined && centerUser.y !== undefined) {
           const dx = centerUser.x - user.x;
@@ -1016,7 +1515,7 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
           user.vy += (dy / distance) * force;
         }
 
-        // Repulsion from other nodes (copied from React)
+        // Repulsion from other nodes
         users.forEach(other => {
           if (other.id !== user.id && other.x !== undefined && other.y !== undefined) {
             const dx = user.x! - other.x;
@@ -1030,13 +1529,13 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
           }
         });
 
-        // Apply velocity with damping (copied from React)
+        // Apply velocity with damping
         user.vx *= 0.95;
         user.vy *= 0.95;
         user.x += user.vx;
         user.y += user.vy;
 
-        // Boundary constraints (copied from React)
+        // Boundary constraints
         const margin = 50;
         if (user.x < margin) { user.x = margin; user.vx = 0; }
         if (user.x > this.canvas.width - margin) { user.x = this.canvas.width - margin; user.vx = 0; }
@@ -1115,20 +1614,60 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.getNetworkUsers().find(u => u.id === this.hoveredUser) || null;
   }
 
-  detectNearbyUsers() {
-    this.isDetecting = true;
-    
-    // Simulate API call to backend (copied from React logic)
-    setTimeout(() => {
-      this.lastUpdateTime = new Date();
-      this.isDetecting = false;
-    }, 1500);
-  }
 
-  onRadiusChange(event: any) {
+async detectNearbyUsers() {
+  this.isDetecting = true;
+  
+  try {
+    // Update location first if needed
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          this.userLocation = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          };
+          
+          // Update backend with new location
+          this.userService.updateLocation(
+            this.userLocation.latitude,
+            this.userLocation.longitude
+          ).subscribe({
+            next: () => console.log('Location updated on backend'),
+            error: (error) => console.warn('Failed to update location:', error)
+          });
+        },
+        (error) => console.warn('Geolocation error:', error)
+      );
+    }
+
+    await this.loadNearbyUsers();
+    this.lastUpdateTime = new Date();
+  } catch (error) {
+    console.error('Error detecting nearby users:', error);
+  } finally {
+    this.isDetecting = false;
+  }
+}
+
+async testBackendConnection() {
+  try {
+    const health = await this.userService.testConnection().toPromise();
+    console.log('Backend health check:', health);
+    return true;
+  } catch (error) {
+    console.error('Backend connection failed:', error);
+    return false;
+  }
+}
+
+  async onRadiusChange(event: any) {
     const value = event.target ? event.target.value : event;
     this.searchRadius = parseInt(value);
     this.filterUsersByRadius();
+    
+    // Reload users with new radius
+    await this.loadNearbyUsers();
   }
 
   toggleAutoRefresh(event: any) {
@@ -1142,6 +1681,7 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
     } else {
       if (this.autoRefreshInterval) {
         clearInterval(this.autoRefreshInterval);
+        this.autoRefreshInterval = null;
       }
     }
   }
@@ -1159,21 +1699,15 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   confirmLogout() {
-    // Clean up intervals and animations
-    if (this.autoRefreshInterval) {
-      clearInterval(this.autoRefreshInterval);
-      this.autoRefreshInterval = null;
-    }
-    
-    if (this.animationFrame) {
-      cancelAnimationFrame(this.animationFrame);
-    }
+    this.cleanup();
     
     // Reset state
     this.isDetecting = false;
     this.isAutoRefreshEnabled = false;
     this.selectedUser = null;
     this.showLogoutConfirm = false;
+    this.allUsers = [];
+    this.filteredUsers = [];
     
     // Logout via auth service
     this.authService.logout();
@@ -1182,6 +1716,11 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
 
   cancelLogout() {
     this.showLogoutConfirm = false;
+  }
+
+  retryLoadUsers() {
+    this.error = null;
+    this.loadNearbyUsers();
   }
 
   getUserInitials(name: string): string {
@@ -1198,7 +1737,18 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
     return `${Math.floor(diffMins / 60)}h`;
   }
 
-  private filterUsersByRadius() {
-    this.filteredUsers = this.allUsers.filter(user => !user.isCenter && user.distance <= this.searchRadius);
-  }
+private filterUsersByRadius() {
+  // ✅ Fix: Filter for list view (exclude center user)
+  this.filteredUsers = this.allUsers.filter(user => {
+    const isNotCenter = !user.isCenter;
+    const isWithinRadius = user.distance <= this.searchRadius;
+    
+    console.log(`User ${user.name}: isNotCenter=${isNotCenter}, distance=${user.distance}, radius=${this.searchRadius}, withinRadius=${isWithinRadius}`);
+    
+    return isNotCenter && isWithinRadius;
+  });
+  
+  console.log('Filtered users for list view:', this.filteredUsers.length);
+  console.log('Filtered users:', this.filteredUsers.map(u => ({ name: u.name, distance: u.distance })));
+}
 }

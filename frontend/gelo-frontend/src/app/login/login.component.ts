@@ -402,89 +402,97 @@ export class LoginComponent {
     this.clearMessages();
   }
 
-  onLogin() {
-    if (!this.loginData.email || !this.loginData.password) {
-      this.errorMessage = 'Please enter both email and password';
-      return;
-    }
-
-    this.isLoading = true;
-    this.clearMessages();
-
-    // Simulate login process with timeout
-    setTimeout(() => {
-      // Mock authentication check
-      if (this.loginData.email === 'arjun.kumar@example.com' && this.loginData.password === 'password123') {
-        const user = {
-          id: '1',
-          name: 'Arjun Kumar',
-          email: 'arjun.kumar@example.com',
-          contact: '+91-9876543210',
-          bio: 'Software engineer passionate about mobile development'
-        };
-        
-        const token = this.generateToken(user.id);
-        this.authService.setAuthData(token, user);
-        
-        this.isLoading = false;
-        this.successMessage = 'Login successful! Redirecting...';
-        setTimeout(() => this.router.navigate(['/nearby']), 1000);
-      } else {
-        this.isLoading = false;
-        this.errorMessage = 'Invalid email or password';
-      }
-    }, 1500);
+onLogin() {
+  if (!this.loginData.email || !this.loginData.password) {
+    this.errorMessage = 'Please enter both email and password';
+    return;
   }
 
-  onRegister() {
-    if (!this.registerData.name || !this.registerData.email || !this.registerData.password) {
-      this.errorMessage = 'Please fill in all required fields';
-      return;
+  this.isLoading = true;
+  this.clearMessages();
+
+  // ✅ Use real backend authentication
+  this.authService.login({
+    email: this.loginData.email,
+    password: this.loginData.password
+  }).subscribe({
+    next: (response) => {
+      this.isLoading = false;
+      this.successMessage = 'Login successful! Redirecting...';
+      setTimeout(() => this.router.navigate(['/nearby']), 1000);
+    },
+    error: (error) => {
+      this.isLoading = false;
+      this.errorMessage = error.message || 'Login failed. Please check your credentials.';
+      console.error('Login error:', error);
     }
+  });
+}
 
-    if (this.registerData.password.length < 6) {
-      this.errorMessage = 'Password must be at least 6 characters';
-      return;
-    }
+onRegister() {
+  if (!this.registerData.name || !this.registerData.email || !this.registerData.password) {
+    this.errorMessage = 'Please fill in all required fields';
+    return;
+  }
 
-    this.isLoading = true;
-    this.clearMessages();
+  if (this.registerData.password.length < 6) {
+    this.errorMessage = 'Password must be at least 6 characters';
+    return;
+  }
 
-    // Simulate registration process
-    setTimeout(() => {
-      const newUser = {
-        id: Date.now().toString(),
-        name: this.registerData.name,
-        email: this.registerData.email,
-        contact: this.registerData.contact || '',
-        bio: this.registerData.bio || ''
-      };
-      
-      const token = this.generateToken(newUser.id);
-      this.authService.setAuthData(token, newUser);
-      
+  this.isLoading = true;
+  this.clearMessages();
+
+  // ✅ Use real backend registration
+  this.authService.register({
+    name: this.registerData.name,
+    email: this.registerData.email,
+    password: this.registerData.password,
+    bio: this.registerData.bio,
+    contact: this.registerData.contact
+  }).subscribe({
+    next: (response) => {
       this.isLoading = false;
       this.successMessage = 'Account created! Redirecting...';
       setTimeout(() => this.router.navigate(['/nearby']), 1000);
-    }, 2000);
-  }
-
-  fillDemoLogin() {
-    this.loginData.email = 'arjun.kumar@example.com';
-    this.loginData.password = 'password123';
-    this.clearMessages();
-  }
+    },
+    error: (error) => {
+      this.isLoading = false;
+      this.errorMessage = error.message || 'Registration failed. Please try again.';
+      console.error('Registration error:', error);
+    }
+  });
+}
+fillDemoLogin() {
+  // Use a unique demo email to avoid conflicts
+  const demoEmail = `demo.user.${Date.now()}@example.com`;
+  
+  this.isLoading = true;
+  this.clearMessages();
+  
+  // Create a new demo user
+  this.authService.register({
+    name: 'Demo User',
+    email: demoEmail,
+    password: 'demo123456',
+    bio: 'Demo account for testing Gelo app',
+    contact: '+91-9876543210'
+  }).subscribe({
+    next: (response) => {
+      this.isLoading = false;
+      this.successMessage = 'Demo account created! Redirecting...';
+      setTimeout(() => this.router.navigate(['/nearby']), 1000);
+    },
+    error: (error) => {
+      this.isLoading = false;
+      this.errorMessage = 'Failed to create demo account: ' + error.message;
+      console.error('Demo registration error:', error);
+    }
+  });
+}
 
   private clearMessages() {
     this.errorMessage = '';
     this.successMessage = '';
-  }
-
-  private generateToken(userId: string): string {
-    return btoa(JSON.stringify({ 
-      userId, 
-      timestamp: Date.now(),
-      type: 'gelo_token'
-    }));
   }
 }

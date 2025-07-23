@@ -76,28 +76,63 @@ const register = async (req, res) => {
 /**
  * Login user
  */
+/**
+ * Login user - FIXED VERSION
+ */
+/**
+ * Login user - FIXED VERSION
+ */
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    console.log('🔍 Login attempt:', { email, password: '***' });
+
     // Validation
     if (!email || !password) {
+      console.log('❌ Missing email or password');
       return res.status(400).json({
         message: 'Email and password are required'
       });
     }
 
-    // Find user by email
+    // Find user by email (password should be included by default)
     const user = await User.findOne({ email: email.toLowerCase() });
+    console.log('🔍 User found:', user ? 'YES' : 'NO');
+    console.log('🔍 User has password field:', user && user.password ? 'YES' : 'NO');
+    
     if (!user) {
+      console.log('❌ User not found for email:', email.toLowerCase());
       return res.status(401).json({
         message: 'Invalid email or password'
       });
     }
 
-    // Check password
-    const isPasswordValid = await user.comparePassword(password);
+    // Check if password field exists
+    if (!user.password) {
+      console.log('❌ Password field is missing from user document');
+      return res.status(500).json({
+        message: 'Server error: User password not found'
+      });
+    }
+
+    // Check password using comparePassword method
+    console.log('🔍 Checking password...');
+    let isPasswordValid;
+    
+    if (user.comparePassword) {
+      // If comparePassword method exists, use it
+      isPasswordValid = await user.comparePassword(password);
+    } else {
+      // Fallback to direct bcrypt compare
+      const bcrypt = require('bcryptjs');
+      isPasswordValid = await bcrypt.compare(password, user.password);
+    }
+    
+    console.log('🔍 Password valid:', isPasswordValid);
+    
     if (!isPasswordValid) {
+      console.log('❌ Invalid password');
       return res.status(401).json({
         message: 'Invalid email or password'
       });
@@ -110,6 +145,7 @@ const login = async (req, res) => {
 
     // Generate token
     const token = generateToken(user._id);
+    console.log('✅ Login successful for:', email);
 
     // Return user data (without password)
     const userData = user.getPublicProfile();
@@ -121,12 +157,13 @@ const login = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('❌ Login error:', error);
     res.status(500).json({
       message: 'Internal server error during login'
     });
   }
 };
+
 
 /**
  * Get current user profile

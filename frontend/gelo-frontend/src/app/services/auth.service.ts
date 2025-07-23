@@ -1,198 +1,509 @@
+// src/app/services/auth.service.ts
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpErrorResponse } from '@angular/common/http';
+import { BehaviorSubject, Observable, throwError } from 'rxjs';
+import { tap, catchError, map } from 'rxjs/operators';
 import { Router } from '@angular/router';
-import { Observable, of } from 'rxjs';
-import { delay, map } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
 
-export interface User {
+export interface LoginCredentials {
+  email?: string;
+  username?: string;
+  password: string;
+}
+
+export interface RegisterData {
+  name: string;
+  email: string;
+  password: string;
+  confirmPassword?: string;
+  bio?: string;
+  contact?: string;
+}
+
+export interface AuthUser {
   id: string;
   name: string;
   email: string;
-  contact?: string;
   bio?: string;
+  contact?: string;
+  isOnline?: boolean;
   createdAt?: Date;
 }
 
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
-
-export interface RegisterRequest {
-  name: string;
-  email: string;
-  password: string;
-  contact?: string;
-  bio?: string;
-}
-
 export interface AuthResponse {
+  message: string;
   token: string;
-  user: User;
-  message?: string;
+  user: AuthUser;
+  expiresIn?: number;
+}
+
+export interface ProfileUpdateData {
+  name?: string;
+  bio?: string;
+  contact?: string;
+  profession?: string;
+  location?: string;
+  interests?: string[];
 }
 
 @Injectable({
   providedIn: 'root'
 })
 export class AuthService {
-  private readonly API_URL = 'http://localhost:3000/api/auth'; // Update this when you have a backend
-  private readonly TOKEN_KEY = 'gelo_token';
-  private readonly USER_KEY = 'gelo_user';
+  private apiUrl = environment.apiUrl || 'http://localhost:3000/api';
+  private tokenKey = 'gelo_auth_token';
+  private userKey = 'gelo_user_data';
+  private refreshTokenKey = 'gelo_refresh_token';
 
-  // Mock users database for demo purposes
-  private mockUsers: User[] = [
-    {
-      id: '1',
-      name: 'Arjun Kumar',
-      email: 'arjun.kumar@example.com',
-      contact: '+91-9876543210',
-      bio: 'Software engineer passionate about mobile development',
-      createdAt: new Date()
-    },
-    {
-      id: '2',
-      name: 'Demo User',
-      email: 'demo@geloapp.com',
-      contact: '+91-9876543211',
-      bio: 'Demo user for testing the application',
-      createdAt: new Date()
-    }
-  ];
+  private currentUserSubject = new BehaviorSubject<AuthUser | null>(null);
+  public currentUser$ = this.currentUserSubject.asObservable();
+  
+  private isAuthenticatedSubject = new BehaviorSubject<boolean>(false);
+  public isAuthenticated$ = this.isAuthenticatedSubject.asObservable();
+
+  private tokenExpirationTimer: any;
 
   constructor(
     private http: HttpClient,
     private router: Router
-  ) {}
-
-  // Simple methods for demo - we'll implement HTTP calls later
-  login(user: any): void {
-    const token = this.generateMockToken(user.id || '1');
-    this.setAuthData(token, user);
+  ) {
+    this.initializeAuth();
   }
 
-  // Mock login for demo purposes
-  mockLogin(credentials: LoginRequest): Observable<AuthResponse> {
-    return of(null).pipe(
-      delay(1500), // Simulate network delay
-      map(() => {
-        // Check mock users
-        const user = this.mockUsers.find(u => 
-          u.email === credentials.email && this.isValidPassword(credentials.password)
-        );
+  /**
+   * Initialize authentication state from localStorage
+   */
+  private initializeAuth(): void {
+    const token = this.getToken();
+    const userData = this.getUserData();
 
-        if (!user) {
-          throw { status: 401, error: { message: 'Invalid email or password' } };
-        }
-
-        const token = this.generateMockToken(user.id);
-        return {
-          token,
-          user,
-          message: 'Login successful'
-        };
-      })
-    );
-  }
-
-  // Mock registration for demo purposes
-  mockRegister(userData: RegisterRequest): Observable<AuthResponse> {
-    return of(null).pipe(
-      delay(2000), // Simulate network delay
-      map(() => {
-        // Check if user already exists
-        const existingUser = this.mockUsers.find(u => u.email === userData.email);
-        if (existingUser) {
-          throw { status: 409, error: { message: 'Email already exists' } };
-        }
-
-        // Create new user
-        const newUser: User = {
-          id: (this.mockUsers.length + 1).toString(),
-          name: userData.name,
-          email: userData.email,
-          contact: userData.contact || '',
-          bio: userData.bio || '',
-          createdAt: new Date()
-        };
-
-        // Add to mock database
-        this.mockUsers.push(newUser);
-
-        const token = this.generateMockToken(newUser.id);
-        return {
-          token,
-          user: newUser,
-          message: 'Account created successfully'
-        };
-      })
-    );
-  }
-
-  // Set authentication data
-  setAuthData(token: string, user: User): void {
-    localStorage.setItem(this.TOKEN_KEY, token);
-    localStorage.setItem(this.USER_KEY, JSON.stringify(user));
-  }
-
-  // Check if user is authenticated
-  isAuthenticated(): boolean {
-    const token = localStorage.getItem(this.TOKEN_KEY);
-    if (!token) return false;
-
-    try {
-      const decoded = this.decodeToken(token);
-      const isValid = decoded.userId && decoded.timestamp;
-      const tokenAge = Date.now() - decoded.timestamp;
-      const maxAge = 24 * 60 * 60 * 1000; // 24 hours
-      
-      return isValid && tokenAge < maxAge;
-    } catch {
-      return false;
+    if (token && userData) {
+      this.currentUserSubject.next(userData);
+      this.isAuthenticatedSubject.next(true);
+      this.startTokenExpirationTimer(token);
     }
   }
 
-  // Get current user
-  getCurrentUser(): User | null {
-    const userData = localStorage.getItem(this.USER_KEY);
-    if (userData) {
-      try {
-        return JSON.parse(userData);
-      } catch {
-        return null;
+  /**
+   * Login user with email/username and password
+   */
+  login(credentials: LoginCredentials): Observable<AuthResponse> {
+  // ✅ Send the data in the format your API expects
+  const loginData = {
+    email: credentials.email,
+    password: credentials.password
+  };
+
+  console.log('Sending login request:', loginData); // Debug log
+
+  return this.http.post<AuthResponse>(`${this.apiUrl}/auth/login`, loginData)
+    .pipe(
+      tap(response => {
+        console.log('Login response received:', response); // Debug log
+        if (response.token && response.user) {
+          this.handleAuthSuccess(response);
+        }
+      }),
+      catchError(this.handleError)
+    );
+}
+  /**
+   * Register new user
+   */
+  register(userData: RegisterData): Observable<AuthResponse> {
+    // Remove confirmPassword before sending to backend
+    const { confirmPassword, ...registrationData } = userData;
+
+    return this.http.post<AuthResponse>(`${this.apiUrl}/auth/register`, registrationData)
+      .pipe(
+        tap(response => {
+          if (response.token && response.user) {
+            this.handleAuthSuccess(response);
+          }
+        }),
+        catchError(this.handleError)
+      );
+  }
+
+  /**
+   * Refresh authentication token
+   */
+  refreshToken(): Observable<AuthResponse> {
+    const refreshToken = localStorage.getItem(this.refreshTokenKey);
+    
+    if (!refreshToken) {
+      this.logout();
+      return throwError('No refresh token available');
+    }
+
+    return this.http.post<AuthResponse>(`${this.apiUrl}/auth/refresh-token`, {
+      refreshToken
+    }).pipe(
+      tap(response => {
+        if (response.token && response.user) {
+          this.handleAuthSuccess(response);
+        }
+      }),
+      catchError(error => {
+        this.logout();
+        return this.handleError(error);
+      })
+    );
+  }
+
+  /**
+   * Logout user
+   */
+  logout(): void {
+  // Call backend logout endpoint
+  const headers = this.getHeaders();
+  if (headers.get('Authorization')) {
+    this.http.post(`${this.apiUrl}/auth/logout`, {}, { headers })
+      .subscribe({
+        next: (response) => console.log('Logout successful'),
+        error: (error) => {
+          // Don't worry about 401 errors during logout - token might be expired
+          if (error.status !== 401) {
+            console.warn('Logout API call failed:', error);
+          }
+        }
+      });
+  }
+
+  // Always clear local auth data regardless of API response
+  this.clearAuthData();
+  this.currentUserSubject.next(null);
+  this.isAuthenticatedSubject.next(false);
+  
+  if (this.tokenExpirationTimer) {
+    clearTimeout(this.tokenExpirationTimer);
+  }
+
+  this.router.navigate(['/login']);
+}
+
+
+  /**
+   * Get current user profile from backend
+   */
+  getProfile(): Observable<{ user: AuthUser }> {
+    return this.http.get<{ user: AuthUser }>(`${this.apiUrl}/auth/profile`, {
+      headers: this.getHeaders()
+    }).pipe(
+      tap(response => {
+        if (response.user) {
+          this.updateUserData(response.user);
+        }
+      }),
+      catchError(this.handleError)
+    );
+  }
+
+  /**
+   * Update user profile
+   */
+  updateProfile(profileData: ProfileUpdateData): Observable<{ user: AuthUser }> {
+    return this.http.put<{ user: AuthUser }>(`${this.apiUrl}/auth/profile`, profileData, {
+      headers: this.getHeaders()
+    }).pipe(
+      tap(response => {
+        if (response.user) {
+          this.updateUserData(response.user);
+        }
+      }),
+      catchError(this.handleError)
+    );
+  }
+
+  /**
+   * Change password
+   */
+  changePassword(currentPassword: string, newPassword: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/auth/change-password`, {
+      currentPassword,
+      newPassword
+    }, {
+      headers: this.getHeaders()
+    }).pipe(
+      catchError(this.handleError)
+    );
+  }
+
+  /**
+   * Request password reset
+   */
+  requestPasswordReset(email: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/auth/forgot-password`, { email })
+      .pipe(catchError(this.handleError));
+  }
+
+  /**
+   * Reset password with token
+   */
+  resetPassword(token: string, newPassword: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/auth/reset-password`, {
+      token,
+      newPassword
+    }).pipe(catchError(this.handleError));
+  }
+
+  /**
+   * Verify email address
+   */
+  verifyEmail(token: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/auth/verify-email`, { token })
+      .pipe(catchError(this.handleError));
+  }
+
+  /**
+   * Resend email verification
+   */
+  resendEmailVerification(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/auth/resend-verification`, {}, {
+      headers: this.getHeaders()
+    }).pipe(catchError(this.handleError));
+  }
+
+  /**
+   * Update user's location
+   */
+  updateLocation(latitude: number, longitude: number): Observable<any> {
+    return this.http.patch(`${this.apiUrl}/auth/location`, {
+      latitude,
+      longitude
+    }, {
+      headers: this.getHeaders()
+    }).pipe(catchError(this.handleError));
+  }
+
+  /**
+   * Update online status
+   */
+  updateOnlineStatus(isOnline: boolean): Observable<any> {
+    return this.http.patch(`${this.apiUrl}/auth/status`, {
+      isOnline
+    }, {
+      headers: this.getHeaders()
+    }).pipe(catchError(this.handleError));
+  }
+
+  /**
+   * Check if user is authenticated
+   */
+  isAuthenticated(): boolean {
+    const token = this.getToken();
+    return !!token && !this.isTokenExpired(token);
+  }
+
+  /**
+   * Get authentication token
+   */
+  getToken(): string | null {
+    return localStorage.getItem(this.tokenKey);
+  }
+
+  /**
+   * Get current user data
+   */
+  getCurrentUser(): AuthUser | null {
+    return this.currentUserSubject.value;
+  }
+
+  /**
+   * Get user data from localStorage
+   */
+  getUserData(): AuthUser | null {
+    const userData = localStorage.getItem(this.userKey);
+    return userData ? JSON.parse(userData) : null;
+  }
+
+  /**
+   * Get HTTP headers with authentication
+   */
+  // Fix AuthService getHeaders method
+
+getHeaders(): HttpHeaders {
+  const token = this.getToken();
+  
+  const headersConfig: any = {
+    'Content-Type': 'application/json'
+  };
+  
+  if (token) {
+    headersConfig['Authorization'] = `Bearer ${token}`;
+  }
+  
+  return new HttpHeaders(headersConfig);
+}
+
+
+  /**
+ * Manually set token and user data
+ */
+setAuthData(token: string, user: AuthUser): void {
+  localStorage.setItem(this.tokenKey, token);
+  localStorage.setItem(this.userKey, JSON.stringify(user));
+  this.currentUserSubject.next(user);
+  this.isAuthenticatedSubject.next(true);
+  this.startTokenExpirationTimer(token);
+}
+
+
+  /**
+   * Handle successful authentication
+   */
+  private handleAuthSuccess(response: AuthResponse): void {
+    // Store token and user data
+    localStorage.setItem(this.tokenKey, response.token);
+    localStorage.setItem(this.userKey, JSON.stringify(response.user));
+
+    // Update subjects
+    this.currentUserSubject.next(response.user);
+    this.isAuthenticatedSubject.next(true);
+
+    // Start token expiration timer
+    this.startTokenExpirationTimer(response.token);
+
+    // Update online status
+    this.updateOnlineStatus(true).subscribe({
+      error: (error) => console.warn('Failed to update online status:', error)
+    });
+  }
+
+  /**
+   * Update user data in storage and subjects
+   */
+  private updateUserData(user: AuthUser): void {
+    localStorage.setItem(this.userKey, JSON.stringify(user));
+    this.currentUserSubject.next(user);
+  }
+
+  /**
+   * Clear authentication data
+   */
+  private clearAuthData(): void {
+    localStorage.removeItem(this.tokenKey);
+    localStorage.removeItem(this.userKey);
+    localStorage.removeItem(this.refreshTokenKey);
+  }
+
+  /**
+   * Check if token is expired
+   */
+  private isTokenExpired(token: string): boolean {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const currentTime = Math.floor(Date.now() / 1000);
+      return payload.exp <= currentTime;
+    } catch (error) {
+      return true;
+    }
+  }
+
+  /**
+   * Start token expiration timer
+   */
+  private startTokenExpirationTimer(token: string): void {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const expirationTime = payload.exp * 1000; // Convert to milliseconds
+      const currentTime = Date.now();
+      const timeUntilExpiration = expirationTime - currentTime;
+
+      // Set timer to refresh token 5 minutes before expiration
+      const refreshTime = timeUntilExpiration - environment.security.tokenExpirationBuffer;
+
+      if (refreshTime > 0) {
+        this.tokenExpirationTimer = setTimeout(() => {
+          this.refreshToken().subscribe({
+            error: () => this.logout()
+          });
+        }, refreshTime);
+      } else {
+        this.logout();
+      }
+    } catch (error) {
+      console.error('Error parsing token:', error);
+      this.logout();
+    }
+  }
+
+  /**
+   * Handle HTTP errors
+   */
+  private handleError = (error: HttpErrorResponse): Observable<never> => {
+    let errorMessage = 'An unexpected error occurred';
+
+    if (error.error instanceof ErrorEvent) {
+      // Client-side error
+      errorMessage = error.error.message;
+    } else {
+      // Server-side error
+      if (error.status === 401) {
+        this.logout();
+        errorMessage = 'Authentication failed. Please login again.';
+      } else if (error.status === 403) {
+        errorMessage = 'Access denied. You do not have permission to perform this action.';
+      } else if (error.status === 404) {
+        errorMessage = 'The requested resource was not found.';
+      } else if (error.status === 422) {
+        errorMessage = error.error?.message || 'Validation failed. Please check your input.';
+      } else if (error.status === 500) {
+        errorMessage = 'Internal server error. Please try again later.';
+      } else if (error.error?.message) {
+        errorMessage = error.error.message;
       }
     }
-    return null;
+
+    return throwError(() => new Error(errorMessage));
   }
 
-  // Logout user
-  logout(): void {
-    localStorage.removeItem(this.TOKEN_KEY);
-    localStorage.removeItem(this.USER_KEY);
-    this.router.navigate(['/login']);
+  /**
+   * Validate registration data
+   */
+  validateRegistrationData(data: RegisterData): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    if (!data.name || data.name.trim().length < 2) {
+      errors.push('Name must be at least 2 characters long');
+    }
+
+    if (!data.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+      errors.push('Please enter a valid email address');
+    }
+
+    if (!data.password || data.password.length < 6) {
+      errors.push('Password must be at least 6 characters long');
+    }
+
+    if (data.confirmPassword && data.password !== data.confirmPassword) {
+      errors.push('Passwords do not match');
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
   }
 
-  // Get token
-  getToken(): string | null {
-    return localStorage.getItem(this.TOKEN_KEY);
-  }
+  /**
+   * Validate login credentials
+   */
+  validateLoginCredentials(credentials: LoginCredentials): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
 
-  // Helper methods
-  private generateMockToken(userId: string): string {
-    return btoa(JSON.stringify({ 
-      userId, 
-      timestamp: Date.now(),
-      type: 'gelo_token'
-    }));
-  }
+    if (!credentials.email && !credentials.username) {
+      errors.push('Email or username is required');
+    }
 
-  private decodeToken(token: string): any {
-    return JSON.parse(atob(token));
-  }
+    if (!credentials.password) {
+      errors.push('Password is required');
+    }
 
-  private isValidPassword(password: string): boolean {
-    // For demo purposes, accept common passwords
-    const validPasswords = ['password123', 'password', 'demo123'];
-    return validPasswords.includes(password);
+    return {
+      valid: errors.length === 0,
+      errors
+    };
   }
 }

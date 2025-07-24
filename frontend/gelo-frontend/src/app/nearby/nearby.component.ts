@@ -25,8 +25,9 @@ interface NearbyUser {
   isCenter?: boolean;
   latitude?: number;
   longitude?: number;
+  originalX?: number; // Add this
+  originalY?: number; // Add this
 }
-
 @Component({
   selector: 'app-nearby',
   template: `
@@ -1784,236 +1785,177 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
     return shuffled.slice(0, count);
   }
 
-  // ========================================
-  // ENHANCED NETWORK FUNCTIONS
-  // ========================================
+private initializeNetworkPositions() {
+  if (this.allUsers.length === 0) return;
 
-  // FUNCTION 1: Initialize Network Positions
-  private initializeNetworkPositions() {
-    if (this.allUsers.length === 0) return;
+  console.log('Initializing static scattered network positions for', this.allUsers.length, 'users');
 
-    console.log('Initializing enhanced network positions for', this.allUsers.length, 'users');
-
-    const centerX = this.canvas?.width ? this.canvas.width / 2 : 500;
-    const centerY = this.canvas?.height ? this.canvas.height / 2 : 350;
-    
-    // Dynamic spacing based on canvas size and user count
-    const canvasWidth = this.canvas?.width || 1000;
-    const canvasHeight = this.canvas?.height || 700;
-    const availableRadius = Math.min(canvasWidth, canvasHeight) * 0.4; // Use 40% of available space
-    
-    const nonCenterUsers = this.allUsers.filter(u => !u.isCenter);
-    const userCount = nonCenterUsers.length;
-
-    this.allUsers.forEach((user, index) => {
-      if (user.isCenter) {
-        user.x = centerX;
-        user.y = centerY;
-        user.vx = 0;
-        user.vy = 0;
-      } else {
-        const userIndex = nonCenterUsers.findIndex(u => u.id === user.id);
+  const canvasWidth = this.canvas?.width || window.innerWidth;
+  const canvasHeight = this.canvas?.height || window.innerHeight;
+  
+  // Define safe zones and margins
+  const margin = Math.min(canvasWidth, canvasHeight) * 0.1; // 10% margin
+  const usableWidth = canvasWidth - (margin * 2);
+  const usableHeight = canvasHeight - (margin * 2);
+  
+  // Center user position - slightly off center for organic feel
+  const centerX = canvasWidth / 2 + (Math.random() - 0.5) * 100;
+  const centerY = canvasHeight / 2 + (Math.random() - 0.5) * 100;
+  
+  const nonCenterUsers = this.allUsers.filter(u => !u.isCenter);
+  
+  this.allUsers.forEach((user, index) => {
+    if (user.isCenter) {
+      // Center user position
+      user.x = centerX;
+      user.y = centerY;
+      user.vx = 0;
+      user.vy = 0;
+    } else {
+      // STATIC SCATTERED DISTRIBUTION - like detective board
+      const userIndex = nonCenterUsers.findIndex(u => u.id === user.id);
+      
+      // Use Poisson disc sampling for natural, static distribution
+      let attempts = 0;
+      let validPosition = false;
+      
+      while (!validPosition && attempts < 50) {
+        // Generate random position in usable area
+        const x = margin + Math.random() * usableWidth;
+        const y = margin + Math.random() * usableHeight;
         
-        // SPIDER WEB DISTRIBUTION - Multiple concentric rings
-        const ringsCount = Math.ceil(Math.sqrt(userCount)); // Dynamic ring count
-        const ring = Math.floor(userIndex / Math.ceil(userCount / ringsCount));
-        const positionInRing = userIndex % Math.ceil(userCount / ringsCount);
-        const usersInThisRing = Math.min(Math.ceil(userCount / ringsCount), userCount - ring * Math.ceil(userCount / ringsCount));
+        // Check minimum distance from other users
+        const minDistance = Math.min(canvasWidth, canvasHeight) * 0.15; // 15% of screen
+        let tooClose = false;
         
-        // Calculate radius for this ring (expanding outward)
-        const minRadius = availableRadius * 0.3; // 30% of available space for inner ring
-        const maxRadius = availableRadius * 0.9; // 90% of available space for outer ring
-        const ringRadius = minRadius + (maxRadius - minRadius) * (ring / Math.max(ringsCount - 1, 1));
-        
-        // Calculate angle with better distribution
-        const angleStep = (2 * Math.PI) / usersInThisRing;
-        const baseAngle = positionInRing * angleStep;
-        
-        // Add spiral offset to create more organic web-like structure
-        const spiralOffset = ring * 0.5; // Offset each ring slightly
-        const finalAngle = baseAngle + spiralOffset;
-        
-        // Add some controlled randomization for organic feel (smaller than before)
-        const radiusVariation = (Math.random() - 0.5) * (ringRadius * 0.15); // 15% variation
-        const angleVariation = (Math.random() - 0.5) * (angleStep * 0.2); // 20% of angle step
-        
-        const finalRadius = Math.max(minRadius * 0.8, ringRadius + radiusVariation);
-        const finalAngleWithVariation = finalAngle + angleVariation;
-        
-        // Calculate final position
-        user.x = centerX + Math.cos(finalAngleWithVariation) * finalRadius;
-        user.y = centerY + Math.sin(finalAngleWithVariation) * finalRadius;
-        
-        // Initialize with very gentle velocities for smooth movement
-        const velocityMagnitude = 0.3 + Math.random() * 0.4; // 0.3 to 0.7
-        const velocityAngle = Math.random() * 2 * Math.PI;
-        user.vx = Math.cos(velocityAngle) * velocityMagnitude;
-        user.vy = Math.sin(velocityAngle) * velocityMagnitude;
-      }
-    });
-  }
-
-  // FUNCTION 2: Enhanced Physics with smoother, more distributed movement
-  updatePhysics(users: NearbyUser[]) {
-    const centerUser = users.find(u => u.isCenter);
-    const time = Date.now() * 0.001;
-    
-    // Dynamic canvas dimensions
-    const canvasWidth = this.canvas?.width || 1000;
-    const canvasHeight = this.canvas?.height || 700;
-    const centerX = canvasWidth / 2;
-    const centerY = canvasHeight / 2;
-    
-    users.forEach(user => {
-      if (!user.isCenter && user.x !== undefined && user.y !== undefined &&
-          user.vx !== undefined && user.vy !== undefined) {
-
-        // 1. GENTLE ORBITAL ATTRACTION - keeps users in web-like structure
-        if (centerUser && centerUser.x !== undefined && centerUser.y !== undefined) {
-          const dx = centerUser.x - user.x;
-          const dy = centerUser.y - user.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          
-          if (distance > 0) {
-            // Dynamic optimal distance based on canvas size and user count
-            const optimalDistance = Math.min(canvasWidth, canvasHeight) * 0.25; // 25% of smaller dimension
-            const distanceError = distance - optimalDistance;
-            const attractionForce = 0.005 * (distanceError / optimalDistance); // Gentler force
-            
-            user.vx += (dx / distance) * attractionForce;
-            user.vy += (dy / distance) * attractionForce;
-          }
-        }
-
-        // 2. SMART REPULSION - prevents clustering while maintaining web structure
-        users.forEach(other => {
-          if (other.id !== user.id && other.x !== undefined && other.y !== undefined) {
-            const dx = user.x! - other.x;
-            const dy = user.y! - other.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            // Dynamic repulsion distance based on space availability
-            const repulsionDistance = Math.min(canvasWidth, canvasHeight) * 0.08; // 8% of smaller dimension
-            
-            if (distance < repulsionDistance && distance > 0) {
-              const repulsionForce = (repulsionDistance - distance) / repulsionDistance * 0.01;
-              user.vx! += (dx / distance) * repulsionForce;
-              user.vy! += (dy / distance) * repulsionForce;
+        for (const otherUser of this.allUsers) {
+          if (otherUser.id !== user.id && otherUser.x !== undefined && otherUser.y !== undefined) {
+            const distance = Math.sqrt((x - otherUser.x) ** 2 + (y - otherUser.y) ** 2);
+            if (distance < minDistance) {
+              tooClose = true;
+              break;
             }
           }
-        });
-
-        // 3. GENTLE BROWNIAN MOTION - creates organic, soothing movement
-        const personalOffset = user.id.charCodeAt(0) % 100; // Personal offset for each user
-        const slowTime = time * 0.5; // Slower time for gentler movement
+        }
         
-        const brownianX = Math.sin(slowTime + personalOffset) * 0.003;
-        const brownianY = Math.cos(slowTime * 1.3 + personalOffset) * 0.003;
-        const noiseX = (Math.random() - 0.5) * 0.001;
-        const noiseY = (Math.random() - 0.5) * 0.001;
+        if (!tooClose) {
+          user.x = x;
+          user.y = y;
+          validPosition = true;
+        }
         
-        user.vx += brownianX + noiseX;
-        user.vy += brownianY + noiseY;
-
-        // 4. ORBITAL DRIFT - adds slow circular motion for web-like feel
-        const distanceFromCenter = Math.sqrt((user.x - centerX) ** 2 + (user.y - centerY) ** 2);
-        if (distanceFromCenter > 0) {
-          const orbitalSpeed = 0.002; // Very slow orbital motion
-          const orbitalForceX = -(user.y - centerY) / distanceFromCenter * orbitalSpeed;
-          const orbitalForceY = (user.x - centerX) / distanceFromCenter * orbitalSpeed;
-          
-          user.vx += orbitalForceX;
-          user.vy += orbitalForceY;
-        }
-
-        // 5. ENHANCED DAMPING for smooth motion
-        const dampingFactor = 0.95; // Less aggressive damping
-        user.vx *= dampingFactor;
-        user.vy *= dampingFactor;
-
-        // 6. VELOCITY LIMITING for consistent smooth movement
-        const maxVelocity = 0.8; // Slower maximum velocity
-        const currentSpeed = Math.sqrt(user.vx * user.vx + user.vy * user.vy);
-        if (currentSpeed > maxVelocity) {
-          const scale = maxVelocity / currentSpeed;
-          user.vx *= scale;
-          user.vy *= scale;
-        }
-
-        // Apply velocity
-        user.x += user.vx;
-        user.y += user.vy;
-
-        // 7. SOFT BOUNDARY CONSTRAINTS with space utilization
-        const margin = Math.min(canvasWidth, canvasHeight) * 0.05; // 5% margin
-        const bounceForce = 0.3; // Gentler bouncing
-        
-        if (user.x < margin) { 
-          user.x = margin; 
-          user.vx = Math.abs(user.vx) * bounceForce;
-        }
-        if (user.x > canvasWidth - margin) { 
-          user.x = canvasWidth - margin; 
-          user.vx = -Math.abs(user.vx) * bounceForce;
-        }
-        if (user.y < margin) { 
-          user.y = margin; 
-          user.vy = Math.abs(user.vy) * bounceForce;
-        }
-        if (user.y > canvasHeight - margin) { 
-          user.y = canvasHeight - margin; 
-          user.vy = -Math.abs(user.vy) * bounceForce;
-        }
-      }
-    });
-  }
-
-  // FUNCTION 3: Enhanced connection generation for better web structure
-  private generateConnections(userId: string, allUsers: NearbyUser[]): string[] {
-    const connections: string[] = [];
-    const currentUser = allUsers.find(u => u.id === userId);
-    
-    if (!currentUser) return connections;
-
-    // Always connect to center user if this isn't the center user
-    if (userId !== 'center') {
-      connections.push('center');
-    }
-
-    // ENHANCED WEB-LIKE CONNECTIONS
-    const otherUsers = allUsers.filter(u => u.id !== userId && u.id !== 'center');
-    
-    // Calculate distances to all other users for intelligent connections
-    const userDistances = otherUsers.map(user => {
-      if (!currentUser.x || !currentUser.y || !user.x || !user.y) {
-        return { user, distance: Infinity };
+        attempts++;
       }
       
-      const dx = currentUser.x - user.x;
-      const dy = currentUser.y - user.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      return { user, distance };
-    }).sort((a, b) => a.distance - b.distance);
-
-    // Connect to closest neighbors (creates local clusters in the web)
-    const nearbyConnections = Math.min(2, userDistances.length);
-    for (let i = 0; i < nearbyConnections; i++) {
-      if (userDistances[i] && userDistances[i].distance < 200) { // Only connect if reasonably close
-        connections.push(userDistances[i].user.id);
+      // Fallback grid-based positioning with randomization
+      if (!validPosition) {
+        const cols = Math.ceil(Math.sqrt(nonCenterUsers.length));
+        const rows = Math.ceil(nonCenterUsers.length / cols);
+        const cellWidth = usableWidth / cols;
+        const cellHeight = usableHeight / rows;
+        
+        const col = userIndex % cols;
+        const row = Math.floor(userIndex / cols);
+        
+        // Add randomization within cell for organic look
+        const noiseX = (Math.random() - 0.5) * cellWidth * 0.7;
+        const noiseY = (Math.random() - 0.5) * cellHeight * 0.7;
+        
+        user.x = margin + col * cellWidth + cellWidth / 2 + noiseX;
+        user.y = margin + row * cellHeight + cellHeight / 2 + noiseY;
       }
+      
+      // STATIC - No velocity for movement
+      user.vx = 0;
+      user.vy = 0;
     }
+  });
+  
+  console.log('Static scattered positioning complete');
+}
 
-    // Add some random long-distance connections for web-like structure
-    const longDistanceCount = Math.random() > 0.7 ? 1 : 0; // 30% chance of long connection
-    if (longDistanceCount > 0 && userDistances.length > 3) {
-      const randomIndex = Math.floor(Math.random() * Math.min(userDistances.length, 6)) + 3; // Connect to someone 3-6 positions away
-      if (userDistances[randomIndex] && !connections.includes(userDistances[randomIndex].user.id)) {
-        connections.push(userDistances[randomIndex].user.id);
-      }
+updatePhysics(users: NearbyUser[]) {
+  // STATIC NETWORK - No physics, no movement
+  // Only subtle breathing animation for visual appeal
+  const time = Date.now() * 0.001;
+  
+  users.forEach(user => {
+    // Keep positions completely static - no movement at all
+    // The breathing effect will be handled in the rendering phase
+    
+    // Ensure positions stay within canvas bounds (safety check)
+    if (user.x !== undefined && user.y !== undefined) {
+      const canvasWidth = this.canvas?.width || window.innerWidth;
+      const canvasHeight = this.canvas?.height || window.innerHeight;
+      const nodeRadius = user.isCenter ? 35 : 25;
+      const margin = nodeRadius + 10;
+      
+      user.x = Math.max(margin, Math.min(canvasWidth - margin, user.x));
+      user.y = Math.max(margin, Math.min(canvasHeight - margin, user.y));
     }
+  });
+}
 
-    return connections;
+// Enhanced connection generation for detective board style
+private generateConnections(userId: string, allUsers: NearbyUser[]): string[] {
+  const connections: string[] = [];
+  const currentUser = allUsers.find(u => u.id === userId);
+  
+  if (!currentUser) return connections;
+
+  // Always connect to center user if this isn't the center user
+  if (userId !== 'center') {
+    connections.push('center');
   }
+
+  const otherUsers = allUsers.filter(u => u.id !== userId && u.id !== 'center');
+  
+  if (otherUsers.length === 0) return connections;
+
+  // Create web-like connections - more interconnected like detective board
+  const maxConnections = Math.min(4, otherUsers.length); // Up to 4 connections per user
+  const connectionProbability = 0.6; // 60% chance to connect to each nearby user
+  
+  // Sort by distance for smarter connections
+  const userDistances = otherUsers.map(user => {
+    if (!currentUser.x || !currentUser.y || !user.x || !user.y) {
+      return { user, distance: Infinity };
+    }
+    
+    const dx = currentUser.x - user.x;
+    const dy = currentUser.y - user.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    return { user, distance };
+  }).sort((a, b) => a.distance - b.distance);
+
+  // Connect to nearby users with higher probability
+  let connectionCount = 0;
+  for (let i = 0; i < userDistances.length && connectionCount < maxConnections; i++) {
+    const { user, distance } = userDistances[i];
+    
+    // Higher probability for closer users
+    const distanceBasedProbability = Math.max(0.3, 1 - (distance / (this.canvas?.width || 1000) * 0.5));
+    
+    if (Math.random() < distanceBasedProbability * connectionProbability) {
+      connections.push(user.id);
+      connectionCount++;
+    }
+  }
+
+  // Add some long-range connections for web effect (like detective board strings)
+  if (Math.random() < 0.3 && connectionCount < maxConnections) { // 30% chance
+    const longRangeUsers = userDistances.slice(Math.floor(userDistances.length / 2));
+    if (longRangeUsers.length > 0) {
+      const randomLongRange = longRangeUsers[Math.floor(Math.random() * longRangeUsers.length)];
+      if (!connections.includes(randomLongRange.user.id)) {
+        connections.push(randomLongRange.user.id);
+      }
+    }
+  }
+
+  return connections;
+}
+
 
   private getUserEmoji(name: string, profession?: string): string {
     // Simple emoji assignment based on name or profession
@@ -2033,200 +1975,190 @@ export class NearbyComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  // FUNCTION 4: Enhanced Animation Method
-  animate = () => {
-    if (this.viewMode !== 'network' || !this.ctx || !this.canvas) {
-      this.animationFrame = requestAnimationFrame(this.animate);
-      return;
+animate = () => {
+  if (this.viewMode !== 'network' || !this.ctx || !this.canvas) {
+    this.animationFrame = requestAnimationFrame(this.animate);
+    return;
+  }
+
+  // Clear with deep black background
+  this.ctx.fillStyle = '#000000';
+  this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+  const networkUsers = this.getNetworkUsers();
+  const time = Date.now() * 0.001;
+
+  // Update physics for subtle floating
+  this.updateFloatingPhysics(networkUsers, time);
+
+  // ENHANCED WEB-LIKE CONNECTIONS (Detective Board Style)
+  networkUsers.forEach(user => {
+    if (user.connections) {
+      user.connections.forEach(connId => {
+        const connectedUser = networkUsers.find(u => u.id === connId);
+        if (connectedUser && user.x !== undefined && user.y !== undefined &&
+          connectedUser.x !== undefined && connectedUser.y !== undefined) {
+          
+          const isHighlighted = this.hoveredUser === user.id || this.hoveredUser === connId;
+          const distance = Math.sqrt(
+            (user.x - connectedUser.x) ** 2 + (user.y - connectedUser.y) ** 2
+          );
+          
+          // Create varied connection styles like detective board
+          const connectionType = (user.id + connId).charCodeAt(0) % 3;
+          
+          this.ctx.beginPath();
+          this.ctx.moveTo(user.x, user.y);
+          
+          if (connectionType === 0) {
+            // Straight line (most common)
+            this.ctx.lineTo(connectedUser.x, connectedUser.y);
+          } else if (connectionType === 1) {
+            // Curved line for organic feel
+            const midX = (user.x + connectedUser.x) / 2 + (Math.sin(time * 0.3 + user.id.charCodeAt(0)) * 10);
+            const midY = (user.y + connectedUser.y) / 2 + (Math.cos(time * 0.4 + connId.charCodeAt(0)) * 10);
+            this.ctx.quadraticCurveTo(midX, midY, connectedUser.x, connectedUser.y);
+          } else {
+            // Slightly angled line
+            const offsetX = Math.sin(user.id.charCodeAt(0)) * 8;
+            const offsetY = Math.cos(connId.charCodeAt(0)) * 8;
+            this.ctx.lineTo(connectedUser.x + offsetX, connectedUser.y + offsetY);
+            this.ctx.lineTo(connectedUser.x, connectedUser.y);
+          }
+          
+          if (isHighlighted) {
+            // Highlighted connections
+            this.ctx.strokeStyle = `rgba(220, 38, 38, 0.9)`;
+            this.ctx.lineWidth = 2.5;
+            this.ctx.shadowColor = '#dc2626';
+            this.ctx.shadowBlur = 6;
+          } else {
+            // Regular web connections - subtle but visible
+            const opacity = Math.max(0.15, 0.4 - (distance / Math.min(this.canvas.width, this.canvas.height) * 0.5));
+            this.ctx.strokeStyle = `rgba(120, 120, 120, ${opacity})`;
+            this.ctx.lineWidth = 1;
+            this.ctx.shadowBlur = 0;
+          }
+          
+          this.ctx.stroke();
+          this.ctx.shadowBlur = 0;
+
+          // Add connection nodes at intersections (detective board style)
+          if (!isHighlighted && Math.random() < 0.05) { // Reduced frequency
+            const progress = 0.3 + Math.random() * 0.4;
+            const nodeX = user.x + (connectedUser.x - user.x) * progress;
+            const nodeY = user.y + (connectedUser.y - user.y) * progress;
+
+            this.ctx.beginPath();
+            this.ctx.arc(nodeX, nodeY, 1.5, 0, Math.PI * 2);
+            this.ctx.fillStyle = 'rgba(120, 120, 120, 0.4)';
+            this.ctx.fill();
+          }
+        }
+      });
+    }
+  });
+
+  // SIMPLIFIED NODE RENDERING (No glittering, subtle floating)
+  networkUsers.forEach(user => {
+    if (user.x === undefined || user.y === undefined) return;
+
+    const isHovered = this.hoveredUser === user.id;
+    const isCenter = user.isCenter;
+    const baseSize = isCenter ? 30 : 20;
+
+    // Simple hover effect without glittering
+    if (isHovered) {
+      // Single outer ring - no animation
+      this.ctx.beginPath();
+      this.ctx.arc(user.x, user.y, baseSize + 10, 0, Math.PI * 2);
+      this.ctx.strokeStyle = `rgba(220, 38, 38, 0.6)`;
+      this.ctx.lineWidth = 2;
+      this.ctx.stroke();
     }
 
-    // Clear with subtle gradient background
-    const gradient = this.ctx.createRadialGradient(
-      this.canvas.width / 2, this.canvas.height / 2, 0,
-      this.canvas.width / 2, this.canvas.height / 2, Math.max(this.canvas.width, this.canvas.height) / 2
-    );
-    gradient.addColorStop(0, '#0a0a0a');
-    gradient.addColorStop(1, '#000000');
-    this.ctx.fillStyle = gradient;
-    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    // Node background - simple solid color, no gradient
+    this.ctx.beginPath();
+    this.ctx.arc(user.x, user.y, baseSize, 0, Math.PI * 2);
+    
+    if (isCenter) {
+      this.ctx.fillStyle = '#555555';
+    } else if (isHovered) {
+      this.ctx.fillStyle = '#dc2626';
+    } else {
+      this.ctx.fillStyle = '#666666';
+    }
+    this.ctx.fill();
 
-    const networkUsers = this.getNetworkUsers();
-    const time = Date.now() * 0.001;
+    // Node border - simple and clean
+    this.ctx.beginPath();
+    this.ctx.arc(user.x, user.y, baseSize, 0, Math.PI * 2);
+    
+    if (isHovered) {
+      this.ctx.strokeStyle = `rgba(220, 38, 38, 0.8)`;
+      this.ctx.lineWidth = 2;
+    } else {
+      this.ctx.strokeStyle = user.isOnline ? 'rgba(220, 38, 38, 0.6)' : 'rgba(120, 120, 120, 0.6)';
+      this.ctx.lineWidth = 1.5;
+    }
+    this.ctx.stroke();
 
-    // ENHANCED WEB-LIKE CONNECTIONS
-    networkUsers.forEach(user => {
-      if (user.connections) {
-        user.connections.forEach(connId => {
-          const connectedUser = networkUsers.find(u => u.id === connId);
-          if (connectedUser && user.x !== undefined && user.y !== undefined &&
-            connectedUser.x !== undefined && connectedUser.y !== undefined) {
-            
-            const isHighlighted = this.hoveredUser === user.id || this.hoveredUser === connId;
-            const distance = Math.sqrt(
-              (user.x - connectedUser.x) ** 2 + (user.y - connectedUser.y) ** 2
-            );
-            
-            // Dynamic connection styling based on distance
-            const maxDistance = Math.min(this.canvas.width, this.canvas.height) * 0.5;
-            const opacity = Math.max(0.1, 1 - (distance / maxDistance));
-            
-            this.ctx.beginPath();
-            this.ctx.moveTo(user.x, user.y);
-            this.ctx.lineTo(connectedUser.x, connectedUser.y);
-            
-            if (isHighlighted) {
-              // Highlighted connections with pulsing effect
-              const pulseOpacity = 0.6 + Math.sin(time * 3) * 0.3;
-              this.ctx.strokeStyle = `rgba(220, 38, 38, ${pulseOpacity})`;
-              this.ctx.lineWidth = 2.5;
-              this.ctx.shadowColor = '#dc2626';
-              this.ctx.shadowBlur = 8;
-            } else {
-              // Regular connections with distance-based opacity
-              this.ctx.strokeStyle = `rgba(55, 65, 81, ${opacity * 0.6})`;
-              this.ctx.lineWidth = 1;
-              this.ctx.shadowBlur = 0;
-            }
-            
-            this.ctx.stroke();
-            this.ctx.shadowBlur = 0;
+    // Emoji/Icon - no shadow effects
+    this.ctx.font = `${Math.round(baseSize * 0.5)}px "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'middle';
+    this.ctx.fillStyle = '#ffffff';
+    this.ctx.shadowBlur = 0; // Remove all shadows
+    this.ctx.fillText(user.image || '👤', user.x, user.y);
 
-            // Flowing particles on highlighted connections
-            if (isHighlighted) {
-              const progress = (Math.sin(time * 2 + user.id.charCodeAt(0)) + 1) / 2;
-              const particleX = user.x + (connectedUser.x - user.x) * progress;
-              const particleY = user.y + (connectedUser.y - user.y) * progress;
-
-              this.ctx.beginPath();
-              this.ctx.arc(particleX, particleY, 2, 0, Math.PI * 2);
-              this.ctx.fillStyle = `rgba(220, 38, 38, ${0.8 + Math.sin(time * 4) * 0.2})`;
-              this.ctx.shadowColor = '#dc2626';
-              this.ctx.shadowBlur = 6;
-              this.ctx.fill();
-              this.ctx.shadowBlur = 0;
-            }
-          }
-        });
-      }
-    });
-
-    // ENHANCED NODE RENDERING
-    networkUsers.forEach(user => {
-      if (user.x === undefined || user.y === undefined) return;
-
-      const isHovered = this.hoveredUser === user.id;
-      const isCenter = user.isCenter;
-      const nodeSize = isCenter ? 35 : 25; // Slightly smaller for better distribution
-
-      // Subtle breathing effect for all nodes
-      const breathingScale = 1 + Math.sin(time * 1.5 + user.id.charCodeAt(0)) * 0.03;
-      const finalSize = nodeSize * breathingScale;
-
-      // Multi-layered hover effect
-      if (isHovered) {
-        // Outer glow ring
-        const glowRadius = finalSize + 15 + Math.sin(time * 2) * 5;
-        const glowGradient = this.ctx.createRadialGradient(
-          user.x, user.y, finalSize,
-          user.x, user.y, glowRadius
-        );
-        glowGradient.addColorStop(0, 'rgba(220, 38, 38, 0.3)');
-        glowGradient.addColorStop(1, 'rgba(220, 38, 38, 0)');
-        
-        this.ctx.beginPath();
-        this.ctx.arc(user.x, user.y, glowRadius, 0, Math.PI * 2);
-        this.ctx.fillStyle = glowGradient;
-        this.ctx.fill();
-
-        // Pulsing ring
-        const ringRadius = finalSize + 8 + Math.sin(time * 3) * 3;
-        this.ctx.beginPath();
-        this.ctx.arc(user.x, user.y, ringRadius, 0, Math.PI * 2);
-        this.ctx.strokeStyle = `rgba(220, 38, 38, ${0.4 + Math.sin(time * 2) * 0.3})`;
-        this.ctx.lineWidth = 1.5;
-        this.ctx.stroke();
-      }
-
-      // Node background with gradient
-      const nodeGradient = this.ctx.createRadialGradient(
-        user.x - finalSize * 0.3, user.y - finalSize * 0.3, 0,
-        user.x, user.y, finalSize
-      );
-      
-      if (isCenter) {
-        nodeGradient.addColorStop(0, '#374151');
-        nodeGradient.addColorStop(1, '#1f2937');
-      } else if (isHovered) {
-        nodeGradient.addColorStop(0, '#ef4444');
-        nodeGradient.addColorStop(1, '#dc2626');
-      } else {
-        nodeGradient.addColorStop(0, '#4b5563');
-        nodeGradient.addColorStop(1, '#374151');
-      }
+    // Online status indicator - simple dot
+    if (user.isOnline && !isCenter) {
+      const dotX = user.x + baseSize * 0.6;
+      const dotY = user.y - baseSize * 0.6;
+      const dotSize = 3;
       
       this.ctx.beginPath();
-      this.ctx.arc(user.x, user.y, finalSize, 0, Math.PI * 2);
-      this.ctx.fillStyle = nodeGradient;
+      this.ctx.arc(dotX, dotY, dotSize, 0, Math.PI * 2);
+      this.ctx.fillStyle = '#10b981';
+      this.ctx.shadowBlur = 0; // Remove glow effect
       this.ctx.fill();
+    }
+  });
 
-      // Node border with dynamic styling
-      this.ctx.beginPath();
-      this.ctx.arc(user.x, user.y, finalSize, 0, Math.PI * 2);
-      
-      if (user.isOnline) {
-        if (isHovered) {
-          const pulseIntensity = 0.6 + Math.sin(time * 4) * 0.4;
-          this.ctx.strokeStyle = `rgba(220, 38, 38, ${pulseIntensity})`;
-          this.ctx.lineWidth = isCenter ? 3 : 2.5;
-        } else {
-          this.ctx.strokeStyle = '#dc2626';
-          this.ctx.lineWidth = isCenter ? 2.5 : 2;
-        }
-      } else {
-        this.ctx.strokeStyle = '#6b7280';
-        this.ctx.lineWidth = isCenter ? 2 : 1.5;
-      }
-      
-      this.ctx.stroke();
-
-      // Emoji/Icon with enhanced rendering
-      this.ctx.font = `${Math.round(finalSize * 0.6)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
-      this.ctx.textAlign = 'center';
-      this.ctx.textBaseline = 'middle';
-      this.ctx.fillStyle = '#ffffff';
-      
-      if (isHovered) {
-        this.ctx.shadowColor = '#ffffff';
-        this.ctx.shadowBlur = 8;
-      }
-      
-      this.ctx.fillText(user.image || '👤', user.x, user.y);
-      this.ctx.shadowBlur = 0;
-
-      // Online status indicator with gentle pulsing
-      if (user.isOnline && !isCenter) {
-        const dotX = user.x + finalSize * 0.6;
-        const dotY = user.y - finalSize * 0.6;
-        const dotSize = 3 + Math.sin(time * 4) * 0.5;
-        
-        const dotGradient = this.ctx.createRadialGradient(dotX, dotY, 0, dotX, dotY, dotSize);
-        dotGradient.addColorStop(0, '#10b981');
-        dotGradient.addColorStop(1, '#059669');
-        
-        this.ctx.beginPath();
-        this.ctx.arc(dotX, dotY, dotSize, 0, Math.PI * 2);
-        this.ctx.fillStyle = dotGradient;
-        this.ctx.shadowColor = '#10b981';
-        this.ctx.shadowBlur = 4;
-        this.ctx.fill();
-        this.ctx.shadowBlur = 0;
-      }
-    });
-
-    // Update physics and continue animation
-    this.updatePhysics(networkUsers);
-    this.animationFrame = requestAnimationFrame(this.animate);
-  }
+  // Continue animation loop for floating effect
+  this.animationFrame = requestAnimationFrame(this.animate);
+}
+updateFloatingPhysics(users: NearbyUser[], time: number) {
+  users.forEach((user, index) => {
+    if (user.x === undefined || user.y === undefined) return;
+    
+    // Store original position if not already stored
+    if (user.originalX === undefined || user.originalY === undefined) {
+      user.originalX = user.x;
+      user.originalY = user.y;
+    }
+    
+    // Subtle floating animation - each node has unique offset
+    const floatOffset = index * 0.7; // Unique phase for each node
+    const floatAmplitude = user.isCenter ? 3 : 2; // Smaller movement for non-center nodes
+    const floatSpeed = 2.9; // Slow floating speed
+    
+    // Apply floating offset to original position (with null checks)
+    if (user.originalX !== undefined && user.originalY !== undefined) {
+      user.x = user.originalX + Math.sin(time * floatSpeed + floatOffset) * floatAmplitude;
+      user.y = user.originalY + Math.cos(time * floatSpeed * 0.7 + floatOffset) * floatAmplitude;
+    }
+    
+    // Ensure positions stay within canvas bounds
+    const canvasWidth = this.canvas?.width || window.innerWidth;
+    const canvasHeight = this.canvas?.height || window.innerHeight;
+    const nodeRadius = user.isCenter ? 35 : 25;
+    const margin = nodeRadius + 10;
+    
+    user.x = Math.max(margin, Math.min(canvasWidth - margin, user.x));
+    user.y = Math.max(margin, Math.min(canvasHeight - margin, user.y));
+  });
+}
 
   // FUNCTION 5: Resize Canvas
   resizeCanvas() {

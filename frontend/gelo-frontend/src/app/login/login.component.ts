@@ -8,19 +8,6 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface RegisterRequest {
-  name: string;
-  email: string;
-  password: string;
-  contact?: string;
-  bio?: string;
-  location?: {
-    latitude: number;
-    longitude: number;
-    lastUpdated: Date;
-  };
-}
-
 export interface AuthResponse {
   token: string;
   user: any;
@@ -54,7 +41,7 @@ export interface AuthResponse {
           </ul>
         </div>
 
-        <!-- Right Side - Login/Register Form -->
+        <!-- Right Side - Login Form -->
         <div class="login-section">
           <!-- Messages -->
           <div class="message error" *ngIf="errorMessage">
@@ -64,131 +51,72 @@ export interface AuthResponse {
             {{ successMessage }}
           </div>
 
-          <!-- Loading -->
-          <div class="loading" *ngIf="isLoading || isGettingLocation">
-            <div class="spinner"></div>
-            <p *ngIf="isLoading">{{ isLoginMode ? 'Signing in...' : 'Creating account...' }}</p>
-            <p *ngIf="isGettingLocation">Getting your location...</p>
-          </div>
-
-          <!-- Login Form -->
-          <div *ngIf="isLoginMode && !isLoading && !isGettingLocation">
-            <div class="login-header">
-              <h3 class="login-title">Welcome</h3>
-              <p class="login-subtitle">Sign in to start connecting</p>
+          <!-- Login Form Container with consistent height -->
+          <div class="login-form-container">
+            <!-- Loading Overlay -->
+            <div class="loading-overlay" *ngIf="isLoading">
+              <div class="loading-content">
+                <div class="spinner"></div>
+                <p>Signing in...</p>
+              </div>
             </div>
 
-            <form (ngSubmit)="onLogin()" #loginForm="ngForm">
-              <div class="form-group">
-                <label class="form-label">Email Address</label>
-                <input type="email" 
-                       class="form-input" 
-                       [(ngModel)]="loginData.email" 
-                       name="email" 
-                       required 
-                       placeholder="Enter your email">
+            <!-- Login Form -->
+            <div class="login-form-content" [class.loading-active]="isLoading">
+              <div class="login-header">
+                <h3 class="login-title">Welcome</h3>
+                <p class="login-subtitle">Sign in to start connecting</p>
               </div>
 
-              <div class="form-group">
-                <label class="form-label">Password</label>
-                <input type="password" 
-                       class="form-input" 
-                       [(ngModel)]="loginData.password" 
-                       name="password" 
-                       required 
-                       placeholder="Enter your password">
+              <form (ngSubmit)="onLogin()" #loginForm="ngForm">
+                <div class="form-group">
+                  <label class="form-label">Email Address</label>
+                  <input type="email" 
+                         class="form-input" 
+                         [(ngModel)]="loginData.email" 
+                         name="email" 
+                         required 
+                         placeholder="Enter your email">
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Password</label>
+                  <input type="password" 
+                         class="form-input" 
+                         [(ngModel)]="loginData.password" 
+                         name="password" 
+                         required 
+                         placeholder="Enter your password">
+                </div>
+
+                <button type="submit" 
+                        class="sign-in-btn" 
+                        [disabled]="!loginForm.valid || isLoading">
+                  Sign In
+                </button>
+              </form>
+
+              <div class="divider">
+                <span class="divider-text">OR</span>
               </div>
 
-              <button type="submit" 
-                      class="sign-in-btn" 
-                      [disabled]="!loginForm.valid">
-                Sign In
+              <button type="button" 
+                      class="demo-btn" 
+                      (click)="onDemoLogin()"
+                      [disabled]="isLoading">
+                <span class="demo-icon">👤</span>
+                Try Demo Account
               </button>
-            </form>
 
-            <div class="divider">
-              <span class="divider-text">or</span>
-            </div>
-
-            <div class="secondary-actions">
-              <p class="switch-mode">
-                Don't have an account? 
-                <a href="#" class="create-account-link" (click)="toggleMode(); $event.preventDefault()">Create one here</a>
-              </p>
-            </div>
-          </div>
-
-          <!-- Register Form -->
-          <div *ngIf="!isLoginMode && !isLoading && !isGettingLocation">
-            <div class="login-header">
-              <h3 class="login-title">Create Account</h3>
-              <p class="login-subtitle">Join the network today</p>
-            </div>
-
-            <form (ngSubmit)="onRegister()" #registerForm="ngForm">
-              <div class="form-group">
-                <label class="form-label">Full Name</label>
-                <input type="text" 
-                       class="form-input" 
-                       [(ngModel)]="registerData.name" 
-                       name="name" 
-                       required 
-                       placeholder="John Doe">
+              <div class="secondary-actions">
+                <p class="additional-info">
+                  Welcome to Gelo! Please sign in with your existing account credentials or try our demo.
+                </p>
+                
+                <p class="support-info">
+                  Need help? Contact our support team for assistance.
+                </p>
               </div>
-
-              <div class="form-group">
-                <label class="form-label">Email Address</label>
-                <input type="email" 
-                       class="form-input" 
-                       [(ngModel)]="registerData.email" 
-                       name="email" 
-                       required 
-                       placeholder="your@email.com">
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Password</label>
-                <input type="password" 
-                       class="form-input" 
-                       [(ngModel)]="registerData.password" 
-                       name="password" 
-                       required 
-                       placeholder="Minimum 6 characters">
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Phone <span class="optional">(optional)</span></label>
-                <input type="tel" 
-                       class="form-input" 
-                       [(ngModel)]="registerData.contact" 
-                       name="contact" 
-                       placeholder="+91 98765 43210">
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Bio <span class="optional">(optional)</span></label>
-                <textarea class="form-input textarea" 
-                          [(ngModel)]="registerData.bio" 
-                          name="bio" 
-                          placeholder="Tell others about yourself..."></textarea>
-              </div>
-
-              <button type="submit" 
-                      class="sign-in-btn" 
-                      [disabled]="!registerForm.valid">
-                Create Account
-              </button>
-            </form>
-
-            <div class="divider">
-              <span class="divider-text">or</span>
-            </div>
-
-            <div class="secondary-actions">
-              <p class="switch-mode">
-                Already have an account? 
-                <a href="#" class="create-account-link" (click)="toggleMode(); $event.preventDefault()">Sign in here</a>
-              </p>
             </div>
           </div>
         </div>
@@ -374,7 +302,7 @@ export interface AuthResponse {
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
-      max-width: 450px;
+      max-width: 337px;
       margin: 0 auto;
       padding: 2rem;
       background: rgba(0, 0, 0, 0.3);
@@ -395,10 +323,74 @@ export interface AuthResponse {
       display: none;
     }
 
+    /* Fixed container with consistent height */
+    .login-form-container {
+      position: relative;
+      min-height: 650px; /* Increased height to accommodate demo button */
+      height: 650px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Loading overlay that covers the entire form */
+    .loading-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(5px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      border-radius: 8px;
+    }
+
+    .loading-content {
+      text-align: center;
+      color: #9ca3af;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid rgba(220, 38, 38, 0.2);
+      border-top: 3px solid #dc2626;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 1rem;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Form content */
+    .login-form-content {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      justify-content: space-between;
+      transition: opacity 0.3s ease;
+    }
+
+    .login-form-content.loading-active {
+      opacity: 0.3;
+      pointer-events: none;
+    }
+
     .login-header {
       text-align: center;
       margin-bottom: 2rem;
       padding-top: 1rem;
+      flex-shrink: 0;
     }
 
     .login-title {
@@ -436,28 +428,6 @@ export interface AuthResponse {
       border: 1px solid rgba(34, 197, 94, 0.3);
     }
 
-    /* Loading */
-    .loading {
-      text-align: center;
-      padding: 2rem;
-      color: #9ca3af;
-    }
-
-    .spinner {
-      width: 32px;
-      height: 32px;
-      border: 3px solid rgba(220, 38, 38, 0.2);
-      border-top: 3px solid #dc2626;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin: 0 auto 1rem;
-    }
-
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-
     .form-group {
       margin-bottom: 2rem;
       position: relative;
@@ -471,13 +441,6 @@ export interface AuthResponse {
       margin-bottom: 1rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-    }
-
-    .optional {
-      color: #6b7280;
-      font-weight: 400;
-      text-transform: lowercase;
-      font-size: 0.85rem;
     }
 
     .form-input {
@@ -524,12 +487,6 @@ export interface AuthResponse {
 
     .form-input:hover:not(:focus) {
       border-bottom-color: rgba(255, 255, 255, 0.3);
-    }
-
-    .textarea {
-      min-height: 100px;
-      resize: vertical;
-      padding-top: 1rem;
     }
 
     .sign-in-btn {
@@ -602,30 +559,81 @@ export interface AuthResponse {
 
     .secondary-actions {
       text-align: center;
-    }
-
-    .switch-mode {
-      margin-bottom: 2rem;
-      color: #9ca3af;
-      font-size: 1rem;
-      line-height: 1.6;
-    }
-
-    .create-account-link {
-      color: #dc2626;
-      text-decoration: none;
-      font-weight: 600;
-      transition: all 0.3s ease;
-      border-bottom: 1px solid transparent;
-    }
-
-    .create-account-link:hover {
-      border-bottom-color: #dc2626;
-      color: #ef4444;
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 1.5rem;
     }
 
     .demo-btn {
-      display: none;
+      width: 100%;
+      padding: 1rem 0;
+      background: rgba(255, 255, 255, 0.05);
+      color: #9ca3af;
+      border: 2px solid rgba(255, 255, 255, 0.15);
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-bottom: 2rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-family: inherit;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .demo-btn::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.1);
+      transition: left 0.3s ease;
+      z-index: -1;
+    }
+
+    .demo-btn:hover:not(:disabled)::before {
+      left: 0;
+    }
+
+    .demo-btn:hover:not(:disabled) {
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .demo-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .demo-icon {
+      font-size: 1.1rem;
+      opacity: 0.8;
+    }
+
+    .support-info {
+      color: #6b7280;
+      font-size: 0.9rem;
+      line-height: 1.4;
+      margin: 0;
+      font-style: italic;
+    }
+
+    .additional-info {
+      color: #9ca3af;
+      font-size: 0.95rem;
+      line-height: 1.5;
+      margin: 0;
     }
 
     /* Responsive Design */
@@ -684,6 +692,11 @@ export interface AuthResponse {
         max-height: none;
       }
 
+      .login-form-container {
+        min-height: 570px;
+        height: 570px;
+      }
+
       .hero-title {
         font-size: 2.5rem;
       }
@@ -712,6 +725,11 @@ export interface AuthResponse {
       .login-section {
         padding: 2rem 1rem;
         background: rgba(0, 0, 0, 0.5);
+      }
+
+      .login-form-container {
+        min-height: 520px;
+        height: 520px;
       }
 
       .hero-title {
@@ -777,23 +795,13 @@ export interface AuthResponse {
   `]
 })
 export class LoginComponent {
-  isLoginMode = true;
   isLoading = false;
   errorMessage = '';
   successMessage = '';
-  isGettingLocation = false;
 
   loginData: LoginRequest = {
     email: '',
     password: ''
-  };
-
-  registerData: RegisterRequest = {
-    name: '',
-    email: '',
-    password: '',
-    contact: '',
-    bio: ''
   };
 
   constructor(
@@ -803,11 +811,6 @@ export class LoginComponent {
     if (this.authService.isAuthenticated()) {
       this.router.navigate(['/nearby']);
     }
-  }
-
-  toggleMode() {
-    this.isLoginMode = !this.isLoginMode;
-    this.clearMessages();
   }
 
   onLogin() {
@@ -836,136 +839,34 @@ export class LoginComponent {
     });
   }
 
-  onRegister() {
-    if (!this.registerData.name || !this.registerData.email || !this.registerData.password) {
-      this.errorMessage = 'Please fill in all required fields';
-      return;
-    }
-
-    if (this.registerData.password.length < 6) {
-      this.errorMessage = 'Password must be at least 6 characters';
-      return;
-    }
-
-    // First get user location, then register
-    this.getCurrentLocation()
-      .then((location) => {
-        this.registerWithLocation(location);
-      })
-      .catch((error) => {
-        console.warn('Location access denied or failed:', error);
-        // Register without location if user denies or location fails
-        this.registerWithLocation(null);
-      });
-  }
-
-  private getCurrentLocation(): Promise<{latitude: number, longitude: number}> {
-    return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) {
-        reject(new Error('Geolocation is not supported by this browser'));
-        return;
-      }
-
-      this.isGettingLocation = true;
-      this.successMessage = 'Getting your location...';
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          this.isGettingLocation = false;
-          this.successMessage = '';
-          resolve({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude
-          });
-        },
-        (error) => {
-          this.isGettingLocation = false;
-          this.successMessage = '';
-          let errorMessage = 'Location access failed';
-          
-          switch (error.code) {
-            case error.PERMISSION_DENIED:
-              errorMessage = 'Location access denied by user';
-              break;
-            case error.POSITION_UNAVAILABLE:
-              errorMessage = 'Location information unavailable';
-              break;
-            case error.TIMEOUT:
-              errorMessage = 'Location request timed out';
-              break;
-          }
-          
-          reject(new Error(errorMessage));
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000, // 10 seconds timeout
-          maximumAge: 300000 // Accept cached position up to 5 minutes old
-        }
-      );
-    });
-  }
-
-  private registerWithLocation(location: {latitude: number, longitude: number} | null) {
+  onDemoLogin() {
+    // Set demo credentials
+    this.loginData.email = 'rahul.menon@example.com';
+    this.loginData.password = 'password123';
+    
     this.isLoading = true;
     this.clearMessages();
 
-    // Prepare registration data
-    const registrationData: RegisterRequest = {
-      name: this.registerData.name,
-      email: this.registerData.email,
-      password: this.registerData.password,
-      bio: this.registerData.bio,
-      contact: this.registerData.contact
-    };
+    // Show a brief message about demo account
+    this.successMessage = 'Loading demo account...';
 
-    // Add location if available
-    if (location) {
-      registrationData.location = {
-        latitude: location.latitude,
-        longitude: location.longitude,
-        lastUpdated: new Date()
-      };
-    }
-
-    this.authService.register(registrationData).subscribe({
-      next: (response) => {
-        this.isLoading = false;
-        this.successMessage = location 
-          ? 'Account created with location! Redirecting...' 
-          : 'Account created! Redirecting...';
-        setTimeout(() => this.router.navigate(['/nearby']), 1000);
-      },
-      error: (error) => {
-        this.isLoading = false;
-        this.errorMessage = error.message || 'Registration failed. Please try again.';
-        console.error('Registration error:', error);
-      }
-    });
-  }
-
-  fillDemoLogin() {
-    const demoEmail = `demo.user.${Date.now()}@example.com`;
-
-    this.isLoading = true;
-    this.clearMessages();
-
-    this.authService.register({
-      name: 'Demo User',
-      email: demoEmail,
-      password: 'demo123456',
-      bio: 'Demo account for testing Gelo app',
-      contact: '+91-9876543210'
+    this.authService.login({
+      email: this.loginData.email,
+      password: this.loginData.password
     }).subscribe({
       next: (response) => {
         this.isLoading = false;
-        this.successMessage = 'Demo account created! Redirecting...';
+        this.successMessage = 'Demo login successful! Redirecting...';
         setTimeout(() => this.router.navigate(['/nearby']), 1000);
       },
       error: (error) => {
         this.isLoading = false;
-        this.errorMessage = 'Failed to create demo account: ' + error.message;
-        console.error('Demo registration error:', error);
+        this.errorMessage = error.message || 'Demo login failed. Please try manual login.';
+        console.error('Demo login error:', error);
+        
+        // Clear demo credentials on error so user can try manual login
+        this.loginData.email = '';
+        this.loginData.password = '';
       }
     });
   }
